@@ -161,7 +161,7 @@ sub process_regions {
         my @valid_entry_pairs = find_valid_entry_pairs($ra_rentry_pairs, $refleftstart, $refleftend, $refrightstart, $refrightend);
 
         if (!@valid_entry_pairs) { # no consistent alignments across region
-            print $outref_fh "NC\t$chr\t$start\t$end\n";
+            print $outref_fh "NOCOV\t$chr\t$start\t$end\n";
             next;
         }
         
@@ -206,7 +206,7 @@ sub process_regions {
             if (@ref_aligns == 1 && $ref_aligns[0]->{ref_start} < $refleftstart && 
                       $ref_aligns[0]->{ref_end} > $refrightend) {
                 my $ref_align = $ref_aligns[0];
-                print $outref_fh "HR\t$chr\t$start\t$end\t$chr\t$ref_align->{ref_start}\t$ref_align->{ref_end}\t$ref_align->{query_entry}\t$ref_align->{query_start}\t$ref_align->{query_end}\n";
+                print $outref_fh "HOMREF\t$chr\t$start\t$end\t$chr\t$ref_align->{ref_start}\t$ref_align->{ref_end}\t$ref_align->{query_entry}\t$ref_align->{query_start}\t$ref_align->{query_end}\n";
                 next;
             }
 
@@ -272,7 +272,10 @@ sub process_regions {
                     $svsize = abs($svsize);
                     my $repeat_bases = ($type eq 'INS' || $type eq 'DUP') ? -1*$refjump : 
                                         (($type eq 'DEL' || $type eq 'CON') ? -1*$queryjump : 0);
-   
+  
+                    if ($repeat_bases > 100*$svsize) { # likely alignment artifact?
+                        next;
+                    }
                     print "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
     
                     if ($type eq 'INS' || $type eq 'DUP') {
