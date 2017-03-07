@@ -45,7 +45,8 @@ if (!$rh_sample_info->{$target_sample}) {
     die "Info file passed with --info option must contain a line for the target sample!\n";
 }
 
-write_multisample_vcf($target_sample, $ra_sample_order, $rh_sample_info);
+my $out_vcf_fh = Open("out.multi.vcf", "w");
+write_multisample_vcf($target_sample, $ra_sample_order, $rh_sample_info, $out_vcf_fh);
 
 #------------
 # End MAIN
@@ -200,6 +201,7 @@ sub write_multisample_vcf {
         print "Processing $chrom:$widestart-$wideend\n";
         my $svtype = $rh_variant->{svtype};
         my $svlen = $rh_variant->{svlen};
+        my $vcfline = $rh_variant->{vcfline};
 
         my %genotype = ();
         foreach my $sample (@{$ra_sample_order}) {
@@ -239,7 +241,7 @@ sub write_multisample_vcf {
                 }
             }
             $genotype{$sample} = join '/', @alleles;
-            $genotype{$sample} = '.' if (!$genotype{$sample});
+            $genotype{$sample} = '.' if ($genotype{$sample} eq '');
         }
         print $out_vcf_fh "$vcfline";
         foreach my $sample (@{$ra_sample_order}) {
