@@ -194,6 +194,7 @@ sub compare_haplotypes {
     }
     else {
         my $rh_pairentry = $ra_entrypairs->[0];
+        my $match_found = 0;
         foreach my $rh_align (@{$rh_pairentry->{aligns}}) {
             my $start1 = $rh_align->{ref_start};
             my $end1 = $rh_align->{ref_end};
@@ -203,10 +204,14 @@ sub compare_haplotypes {
             my $mismatches = $rh_align->{mismatches};
             if ($start1 < 5 && $start2 < 5 && $length1 - $end1 < 5 and $length2 - $end2 < 5) {
                 print "Pair$pair_id $id1 $id2 $start1-$end1 (length $length1) matches $start2-$end2 (length $length2) $mismatches mismatches $cigar_string\n";
+                $match_found = 1;
             }
             else {
                 #print "pair $pair_id NONGLOBAL\n";
             }
+        }
+        if (!$match_found) {
+            print "NOMATCH: pair $pair_id $no_pairs entry pairs $id1 $id2 $length1 $length2\n";
         }
     }
 }

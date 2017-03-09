@@ -112,12 +112,14 @@ sub write_header {
     print $fh "##reference=$Opt{refname}\n" if ($Opt{refname});
     print $fh "##ALT=<ID=DEL,Description=\"Deletion\">\n";
     print $fh "##ALT=<ID=INS,Description=\"Insertion\">\n";
-    #print $fh "##ALT=<ID=INV,Description=\"Inversion\">\n";
+    print $fh "##ALT=<ID=INV,Description=\"Inversion\">\n";
     print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"Left end coordinate of SV\">\n";
     print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, CON=Contraction, INS=Insertion, DUP=Duplication\">\n";
     print $fh "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
     print $fh "##INFO=<ID=HOMAPPLEN,Number=.,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
     print $fh "##FORMAT=<ID=GT,Number=1,Type=Integer,Description=\"Genotype\">\n";
+    print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
+    print $fh "##FORMAT=<ID=ALLELEMATCH,Number=1,Type=Integer,Description=\"Level of allele matching: 0=Inexact match, 1=Exact match\">\n";
     print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$samplename";
     print $fh "\n";
 }
@@ -240,7 +242,7 @@ sub process_regions {
                 }
                 elsif (($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
                        ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
-                    @inversions = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
+                    @inversion_aligns = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
                     print "INVERSION!\n";
                 }
 
@@ -309,6 +311,11 @@ sub process_regions {
                                      };
                         write_simple_variant($outvcf_fh, $rh_var);
                     }
+                }
+
+                # is it an inversion?
+                if (@inversion_aligns) {
+
                 }
             }
         }
