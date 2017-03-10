@@ -113,11 +113,13 @@ sub write_header {
     print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, CON=Contraction, INS=Insertion, DUP=Duplication\">\n";
     print $fh "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
     print $fh "##INFO=<ID=HOMAPPLEN,Number=1,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
+    print $fh "##INFO=<ID=REFWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the reference\">\n";
+    print $fh "##INFO=<ID=CONTIGWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the assembly\">\n";
+    print $fh "##INFO=<ID=CONTIGALTPOS,Number=1,Type=String,Description=\"Position of the event in the assembly\">\n";
     print $fh "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
     print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
     print $fh "##FORMAT=<ID=GTMT,Number=1,Type=Character,Description=\"Genotype match type: L=Inexact match, H=Exact match\">\n";
-    print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$samplename";
-    print $fh "\n";
+    print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n";
 }
 
 sub process_regions {
@@ -458,12 +460,14 @@ sub process_insertion {
         $query2p = $query1 - 1;
     }
 
+    my $altpos = ($comp) ? $query2p + 1 : $query2p - 1;
+    my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
     my $rh_var = {'type' => $type,
                   'svsize' => -1.0*$svsize,
                   'repbases' => $repeat_bases,
                   'chrom' => $chr,
-                  'pos' => $ref2,
-                  'end' => $ref2,
+                  'pos' => $ref2 - 1,
+                  'end' => $ref2 - 1,
                   'contig' => $contig,
                   'altpos' => $query2p,
                   'altend' => $query2,
@@ -525,15 +529,17 @@ sub process_deletion {
         $ref2p = $ref1 - 1;
     }
 
+    my $altpos = ($comp) ? $query2 + 1 : $query2 - 1;
+    my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
     my $rh_var = {'type' => $type,
                   'svsize' => -1.0*$svsize,
                   'repbases' => $repeat_bases,
                   'chrom' => $chr,
-                  'pos' => $ref2p,
-                  'end' => $ref2,
+                  'pos' => $ref2p - 1,
+                  'end' => $ref2 - 1,
                   'contig' => $contig,
-                  'altpos' => $query2,
-                  'altend' => $query2,
+                  'altpos' => $altpos,
+                  'altend' => $altend,
                   'ref1' => $ref1,
                   'ref2' => $ref2,
                   'refjump' => $refjump,
