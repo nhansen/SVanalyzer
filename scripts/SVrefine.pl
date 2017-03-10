@@ -13,15 +13,13 @@ our %Opt;
 
 =head1 NAME
 
-SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants and print them out in VCF format.
+SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants in those regions and print them out in VCF format.
 
 =head1 SYNOPSIS
 
   SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file>
 
 For complete documentation, run C<SVrefine.pl -man>
-
-=head1 DESCRIPTION
 
 =cut
 
@@ -42,7 +40,7 @@ my $samplename = $Opt{samplename};
 my $outvcf = $Opt{outvcf};
 my $vcf_fh = Open($outvcf, "w");
 
-my $refbedfile = $outvcf;
+my $refbedfile = $outvcf; # file to write no coverage and coverage that agrees with reference
 $refbedfile =~ s/\.vcf(.*)$//;
 $refbedfile .= ".bed";
 my $refregions_fh = Open($refbedfile, "w"); # will write regions with support for reference sequence across inquiry regions to bed formatted file 
@@ -67,6 +65,7 @@ process_regions($delta_obj, $regions_fh, $vcf_fh, $refregions_fh, $ref_db, $quer
 
 close $vcf_fh;
 close $regions_fh;
+close $refregions_fh;
 
 #------------
 # End MAIN
@@ -100,7 +99,7 @@ sub process_commandline {
 sub write_header {
     my $fh = shift;
 
-    print $fh "##fileformat=VCFv4.2\n";
+    print $fh "##fileformat=VCFv4.3\n";
     my $date_obj = NISC::Sequencing::Date->new(-plain_language => 'today');
     my $year = $date_obj->year();
     my $month = $date_obj->month();
@@ -110,16 +109,13 @@ sub write_header {
     print $fh "##fileDate=$year$month$day\n";
     print $fh "##source=SVrefine.pl\n";
     print $fh "##reference=$Opt{refname}\n" if ($Opt{refname});
-    print $fh "##ALT=<ID=DEL,Description=\"Deletion\">\n";
-    print $fh "##ALT=<ID=INS,Description=\"Insertion\">\n";
-    print $fh "##ALT=<ID=INV,Description=\"Inversion\">\n";
-    print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"Left end coordinate of SV\">\n";
+    print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End coordinate of SV\">\n";
     print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, CON=Contraction, INS=Insertion, DUP=Duplication\">\n";
-    print $fh "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
-    print $fh "##INFO=<ID=HOMAPPLEN,Number=.,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
-    print $fh "##FORMAT=<ID=GT,Number=1,Type=Integer,Description=\"Genotype\">\n";
+    print $fh "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
+    print $fh "##INFO=<ID=HOMAPPLEN,Number=1,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
+    print $fh "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
     print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
-    print $fh "##FORMAT=<ID=ALLELEMATCH,Number=1,Type=Integer,Description=\"Level of allele matching: 0=Inexact match, 1=Exact match\">\n";
+    print $fh "##FORMAT=<ID=GTMT,Number=1,Type=Character,Description=\"Genotype match type: L=Inexact match, H=Exact match\">\n";
     print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$samplename";
     print $fh "\n";
 }
@@ -134,13 +130,13 @@ sub process_regions {
 
     # examine regions for broken alignments:
 
-    my $rh_ref_entrypairs = $delta_obj->{refentrypairs}; # store entry pairs for each ref entry for quick retrieval
-    my $rh_query_entrypairs = $delta_obj->{queryentrypairs}; # store entry pairs for each query entry for quick retrieval
+    my $rh_ref_entrypairs = $delta_obj->{refentrypairs}; # store entry pairs by ref entry for quick retrieval
+    my $rh_query_entrypairs = $delta_obj->{queryentrypairs}; # store entry pairs by query entry for quick retrieval
 
     while (<$regions_fh>) {
         chomp;
         my ($chr, $start, $end, $remainder) = split /\s/, $_;
-        $start++; # %$!@ BED format!
+        $start++; # 0-based to 1-based
         if ($end < $start) {
             die "End less than start illegal bed format: $_";
         }
@@ -152,7 +148,7 @@ sub process_regions {
 
         my $ra_rentry_pairs = $rh_ref_entrypairs->{$chr}; # everything aligning to this chromosome
 
-        # small regions to the left and right of region of interest are checked for aligning contigs:
+        # check small regions to the left and right of region of interest for aligning contigs:
         my $refleftstart = $start - $Opt{buffer};
         my $refleftend = $start - $Opt{buffer} + $Opt{bufseg} - 1;
         my $refrightstart = $end + $Opt{buffer} - $Opt{bufseg} + 1;
@@ -229,16 +225,16 @@ sub process_regions {
            
             if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chr} @region_aligns)) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
-                my @inversions = ();
+                my @inversion_aligns = ();
                 if (@region_aligns == 2 && $region_aligns[0]->{comp} == $region_aligns[1]->{comp}) {
-                    @simple_breaks = ([$region_aligns[0], $region_aligns[1]]);
-                    print "ONE SIMPLE BREAK\n";
+                    # order them, if possible:
+                    @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1]);
+                    print "ONE SIMPLE BREAK\n" if (@simple_breaks==1);
                 }
                 elsif (($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
                     ($region_aligns[1]->{comp} == $region_aligns[2]->{comp})) {
-                    @simple_breaks = ([$region_aligns[0], $region_aligns[1]], 
-                                      [$region_aligns[1], $region_aligns[2]]); # 2 SVs
-                    print "TWO SIMPLE BREAKS\n";
+                    @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1], $region_aligns[2]);
+                    print "TWO SIMPLE BREAKS\n" if (@simple_breaks==2);
                 }
                 elsif (($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
                        ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
@@ -378,6 +374,44 @@ sub find_valid_entry_pairs {
     }
 
     return @valid_entry_pairs;
+}
+
+sub find_breaks {
+    my @aligns = @_;
+
+    # right now this routine accepts 2 or 3 alignments, all of which have the same value of "comp".
+    # it attempts to order them left to right wrt the reference, and create pairs of alignments
+    # that represent breaks corresponding to structural variants
+
+    my @valid_breaks = ();
+    my @sorted_aligns = sort {$a->{ref_start} <=> $b->{ref_start}} @aligns;
+    for (my $left_index = 0; $left_index <= $#sorted_aligns - 1; $left_index++) {
+        print "LEFTINDEX=$left_index!\n";
+        my $left_align = $sorted_aligns[$left_index];
+        my $right_align = $sorted_aligns[$left_index + 1];
+
+        # is it a valid pair of aligns?
+
+        if ($left_align->{ref_end} < $right_align->{ref_end}) {
+            if ((!$left_align->{comp} && # should line up left to right
+                   $left_align->{query_start} < $right_align->{query_start} && 
+                   $left_align->{query_end} < $right_align->{query_end}) ||
+                ($left_align->{comp} && # query decreasing
+                   $left_align->{query_start} > $right_align->{query_start} && 
+                   $left_align->{query_end} > $right_align->{query_end})) {
+
+                push @valid_breaks, [$left_align, $right_align];
+            }
+            else {
+                print "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
+            }
+        }
+        else {
+            print "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
+        }
+    }
+
+    return @valid_breaks;
 }
 
 sub process_insertion {
