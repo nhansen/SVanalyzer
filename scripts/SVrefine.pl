@@ -261,6 +261,7 @@ sub process_regions {
                  
                     my $type = ($refjump <= 0 && $queryjump <= 0) ? (($svsize < 0) ? 'DUP' : 'CONTRAC') :
                                (($svsize < 0 ) ? 'SIMPLEINS' : 'SIMPLEDEL'); # we reverse this later on so that deletions have negative SVLEN
+
                     if (($svsize < 0) && ($refjump > 0)) {
                         $type = 'SUBSINS';
                     }
@@ -290,6 +291,7 @@ sub process_regions {
                               $refjump, $queryjump, $repeat_bases, $outvcf_fh);
                     }
                     else {
+                        my $altpos = ($comp) ? $query1 - 1 : $query1 + 1;
                         my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
                         my $rh_var = {'type' => $type,
                                       'svsize' => $svsize,
@@ -298,7 +300,7 @@ sub process_regions {
                                       'pos' => $ref1 + 1,
                                       'end' => $ref2 - 1,
                                       'contig' => $contig,
-                                      'altpos' => $query1+1,
+                                      'altpos' => $altpos,
                                       'altend' => $altend,
                                       'ref1' => $ref1,
                                       'ref2' => $ref2,
@@ -643,7 +645,7 @@ sub write_simple_variant {
         if ($Opt{includeseqs}) {
             $refseq = uc($ref_db->seq($chrom, $pos, $end));
             $altseq = uc($query_db->seq($varcontig, $altpos, $altend));
-            if (($altpos == $altend) && ($comp)) { 
+            if (($altpos == $altend) && ($comp)) {
                 $altseq =~ tr/ATGC/TACG/;
             }
         }
