@@ -294,10 +294,10 @@ sub process_regions {
                                       'svsize' => $svsize,
                                       'repbases' => 0,
                                       'chrom' => $chr,
-                                      'pos' => $ref1,
-                                      'end' => $ref2-1,
+                                      'pos' => $ref1 + 1,
+                                      'end' => $ref2 - 1,
                                       'contig' => $contig,
-                                      'altpos' => $query1,
+                                      'altpos' => $query1+1,
                                       'altend' => $altend,
                                       'ref1' => $ref1,
                                       'ref2' => $ref2,
@@ -451,6 +451,8 @@ sub process_insertion {
     my $query1p = $right_align->{query_matches}->{$ref1};
     my $query2p = $left_align->{query_matches}->{$ref2};
 
+    print "query1p $query1p corresponds to ref $ref1 in second align, query2p $query2p corresponds to ref2 $ref2 in first align\n" if ($Opt{verbose});
+
     if (!defined($query1p)) {
         print "NONREPETITIVE INSERTION--need to check\n";
         $query1p = $query2 - 1;
@@ -469,8 +471,8 @@ sub process_insertion {
                   'pos' => $ref2 - 1,
                   'end' => $ref2 - 1,
                   'contig' => $contig,
-                  'altpos' => $query2p,
-                  'altend' => $query2,
+                  'altpos' => $altpos,
+                  'altend' => $altend,
                   'ref1' => $ref1,
                   'ref2' => $ref2,
                   'refjump' => $refjump,
@@ -519,6 +521,8 @@ sub process_deletion {
     
     my $ref1p = $right_align->{ref_matches}->{$query1};
     my $ref2p = $left_align->{ref_matches}->{$query2};
+
+    print "ref1p $ref1p corresponds to query $query1 in second align, ref2p $ref2p corresponds to query2 $query2 in first align\n" if ($Opt{verbose});
 
     if (!defined($ref1p)) {
         print "NONREPETITIVE DELETION--need to check\n";
@@ -617,10 +621,14 @@ sub write_simple_variant {
         }
         if ($Opt{includeseqs}) {
             $refseq = uc($ref_db->seq($chrom, $pos, $end));
-            $altseq = uc($ref_db->seq($chrom, $pos, $pos));
+            #$altseq = uc($ref_db->seq($chrom, $pos, $pos));
+            $altseq = uc($query_db->seq($varcontig, $altpos, $altpos));
+            if ($comp) {
+                $altseq =~ tr/ATGC/TACG/;
+            }
         }
         my $compstring = ($comp) ? '_comp' : '';
-        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$vartype;SVLEN=$svsize;HOMAPPLEN=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;CONTIGALTPOS=$varcontig:$query2;CONTIGWIDENED=$varcontig:$query2-$query1$compstring";
+        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$vartype;SVLEN=$svsize;HOMAPPLEN=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;CONTIGALTPOS=$varcontig:$altpos;CONTIGWIDENED=$varcontig:$query2-$query1$compstring";
         print $fh "$varstring\n";
     }
     else {
