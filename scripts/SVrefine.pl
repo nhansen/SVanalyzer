@@ -110,15 +110,16 @@ sub write_header {
     print $fh "##source=SVrefine.pl\n";
     print $fh "##reference=$Opt{refname}\n" if ($Opt{refname});
     print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End coordinate of SV\">\n";
-    print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, CON=Contraction, INS=Insertion, DUP=Duplication\">\n";
-    print $fh "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
-    print $fh "##INFO=<ID=HOMAPPLEN,Number=1,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
-    print $fh "##INFO=<ID=REFWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the reference\">\n";
-    print $fh "##INFO=<ID=CONTIGWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the assembly\">\n";
-    print $fh "##INFO=<ID=CONTIGALTPOS,Number=1,Type=String,Description=\"Position of the event in the assembly\">\n";
+    print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, INS=Insertion, INV=Inversion\">\n";
+    print $fh "##INFO=<ID=REPTYPE,Number=1,Type=String,Description=\"Type of SV, with designation of uniqueness of new or deleted sequence:SIMPLEDEL=Deletion of at least some unique sequence, SIMPLEINS=Insertion of at least some unique sequence, CONTRAC=Contraction, or deletion of sequence entirely similar to remaining sequence, DUP=Duplication, or insertion of sequence entirely similar to pre-existing sequence, INV=Inversion, SUBSINS=Insertion of new sequence with alteration of some pre-existing sequence, SUBSDEL=Deletion of sequence with alteration of some remaining sequence\">\n";
+    print $fh "##INFO=<ID=SVLEN,Number=1,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference, positive for insertions to reference)\">\n";
+    print $fh "##INFO=<ID=BREAKSIMLENGTH,Number=1,Type=Integer,Description=\"Length of alignable similarity at event breakpoints as determined by the aligner\">\n";
+    print $fh "##INFO=<ID=REFWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the reference allele\">\n";
+    print $fh "##INFO=<ID=ALTWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the alternate allele\">\n";
+    print $fh "##INFO=<ID=ALTPOS,Number=1,Type=String,Description=\"Position (CHROM:POS-END) of the event in the sample assembly\">\n";
     print $fh "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
     print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
-    print $fh "##FORMAT=<ID=GTMT,Number=1,Type=Character,Description=\"Genotype match type: L=Inexact match, H=Exact match\">\n";
+    print $fh "##FORMAT=<ID=GTMATCH,Number=1,Type=Character,Description=\"Genotype match type: E=Exact match, H=Position boundary match, L=Inexact match\">\n";
     print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n";
 }
 
@@ -258,8 +259,8 @@ sub process_regions {
                     my $queryjump = ($comp) ? $query1 - $query2 - 1 : $query2 - $query1 - 1; # from show-diff code--number of unaligned bases
                     my $svsize = $refjump - $queryjump;
                  
-                    my $type = ($refjump <= 0 && $queryjump <= 0) ? (($svsize < 0) ? 'DUP' : 'CON') :
-                               (($svsize < 0 ) ? 'INS' : 'DEL'); # we reverse this later on so that deletions have negative SVLEN
+                    my $type = ($refjump <= 0 && $queryjump <= 0) ? (($svsize < 0) ? 'DUP' : 'CONTRAC') :
+                               (($svsize < 0 ) ? 'SIMPLEINS' : 'SIMPLEDEL'); # we reverse this later on so that deletions have negative SVLEN
                     if (($svsize < 0) && ($refjump > 0)) {
                         $type = 'SUBSINS';
                     }
@@ -270,20 +271,20 @@ sub process_regions {
                         $type = 'SUBS';
                     }
                     $svsize = abs($svsize);
-                    my $repeat_bases = ($type eq 'INS' || $type eq 'DUP') ? -1*$refjump : 
-                                        (($type eq 'DEL' || $type eq 'CON') ? -1*$queryjump : 0);
+                    my $repeat_bases = ($type eq 'SIMPLEINS' || $type eq 'DUP') ? -1*$refjump : 
+                                        (($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') ? -1*$queryjump : 0);
   
                     if ($repeat_bases > 100*$svsize) { # likely alignment artifact?
                         next;
                     }
                     print "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
     
-                    if ($type eq 'INS' || $type eq 'DUP') {
+                    if ($type eq 'SIMPLEINS' || $type eq 'DUP') {
                         process_insertion($delta_obj, $left_align, $right_align, $chr, $contig,
                               $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
                               $refjump, $queryjump, $repeat_bases, $outvcf_fh);
                     }
-                    elsif ($type eq 'DEL' || $type eq 'CON') {
+                    elsif ($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') {
                         process_deletion($delta_obj, $left_align, $right_align, $chr, $contig,
                               $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
                               $refjump, $queryjump, $repeat_bases, $outvcf_fh);
@@ -583,7 +584,7 @@ sub write_simple_variant {
     my $ref1p = $rh_var->{ref1p};
     my $ref2p = $rh_var->{ref2p};
 
-    if ($vartype eq 'INS' || $vartype eq 'DUP') {
+    if ($vartype eq 'SIMPLEINS' || $vartype eq 'DUP') {
         my ($refseq, $altseq) = ('N', '<INS>');
         $svsize = abs($svsize); # insertions always positive
         if ($Opt{includeseqs}) {
@@ -602,10 +603,12 @@ sub write_simple_variant {
         }
 
         my $compstring = ($comp) ? '_comp' : '';
-        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$vartype;SVLEN=$svsize;HOMAPPLEN=$repbases;REFWIDENED=$chrom:$ref2-$ref1;CONTIGALTPOS=$varcontig:$altpos-$altend;CONTIGWIDENED=$varcontig:$query2p-$query1p$compstring";
+        my $svtype = 'INS';
+
+        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2-$ref1;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query2p-$query1p$compstring";
         print $fh "$varstring\n";
     }
-    elsif ($vartype eq 'DEL' || $vartype eq 'CON') {
+    elsif ($vartype eq 'SIMPLEDEL' || $vartype eq 'CONTRAC') {
         my ($refseq, $altseq) = ('N', '<DEL>');
         $svsize = -1.0*abs($svsize); # deletions always negative
         if (!$repbases) { # kludgy for now
@@ -621,25 +624,31 @@ sub write_simple_variant {
         }
         if ($Opt{includeseqs}) {
             $refseq = uc($ref_db->seq($chrom, $pos, $end));
-            #$altseq = uc($ref_db->seq($chrom, $pos, $pos));
             $altseq = uc($query_db->seq($varcontig, $altpos, $altpos));
             if ($comp) {
                 $altseq =~ tr/ATGC/TACG/;
             }
         }
+        my $svtype = 'DEL';
+
         my $compstring = ($comp) ? '_comp' : '';
-        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$vartype;SVLEN=$svsize;HOMAPPLEN=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;CONTIGALTPOS=$varcontig:$altpos;CONTIGWIDENED=$varcontig:$query2-$query1$compstring";
+        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;ALTPOS=$varcontig:$altpos-$altpos$compstring;ALTWIDENED=$varcontig:$query2-$query1$compstring";
         print $fh "$varstring\n";
     }
-    else {
+    else { # complex "SUBS" types--note, this code is NOT appropriate for inversions!
         my ($refseq, $altseq) = ('N', 'N');
         $svsize = ($vartype =~ /DEL/) ? -1.0*abs($svsize) : abs($svsize); # insertions always positive
+        my $svtype = ($vartype =~ /DEL/) ? 'DEL' : 'INS';
+
         if ($Opt{includeseqs}) {
             $refseq = uc($ref_db->seq($chrom, $pos, $end));
             $altseq = uc($query_db->seq($varcontig, $altpos, $altend));
+            if (($altpos == $altend) && ($comp)) { 
+                $altseq =~ tr/ATGC/TACG/;
+            }
         }
         my $compstring = ($comp) ? '_comp' : '';
-        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$vartype;SVLEN=$svsize;HOMAPPLEN=$repbases;REFWIDENED=$chrom:$ref1-$ref2;CONTIGALTPOS=$varcontig:$altpos;CONTIGWIDENED=$varcontig:$query1-$query2$compstring";
+        my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref1-$ref2;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query1-$query2$compstring";
         print $fh "$varstring\n";
     }
 }
