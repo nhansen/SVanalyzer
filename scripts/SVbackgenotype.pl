@@ -132,7 +132,7 @@ sub read_ref_coverage {
 sub write_header {
     my $fh = shift;
 
-    print $fh "##fileformat=VCFv4.2\n";
+    print $fh "##fileformat=VCFv4.3\n";
     my $date_obj = NISC::Sequencing::Date->new(-plain_language => 'today');
     my $year = $date_obj->year();
     my $month = $date_obj->month();
