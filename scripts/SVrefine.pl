@@ -8,6 +8,8 @@ use Pod::Usage;
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
+
+use lib qw( /home/nhansen/projects/gtb/perl/lib );
 use NHGRI::MUMmer::AlignSet;
 our %Opt;
 
@@ -17,7 +19,7 @@ SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assem
 
 =head1 SYNOPSIS
 
-  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file>
+  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage>
 
 For complete documentation, run C<SVrefine.pl -man>
 
@@ -38,19 +40,21 @@ my $regions_file = $Opt{regions};
 my $samplename = $Opt{samplename};
 
 my $outvcf = $Opt{outvcf};
-my $vcf_fh = Open($outvcf, "w");
+my $outvcf_fh = Open($outvcf, "w");
 
-my $refbedfile = $outvcf; # file to write no coverage and coverage that agrees with reference
-$refbedfile =~ s/\.vcf(.*)$//;
-$refbedfile .= ".bed";
+my $refbedfile = $Opt{outref}; # file to write coverage that agrees with reference
 my $refregions_fh = Open($refbedfile, "w"); # will write regions with support for reference sequence across inquiry regions to bed formatted file 
 
-write_header($vcf_fh) if (!$Opt{noheader});
+my $nocovbedfile = $Opt{nocov}; # file to write regions with no coverage in the assembly
+my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no coverage to bed formatted file 
+
+write_header($outvcf_fh) if (!$Opt{noheader});
 
 my $delta_obj = NHGRI::MUMmer::AlignSet->new(
                   -delta_file => $delta_file,
                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
-                  -storequeryentrypairs => 1);
+                  -storequeryentrypairs => 1,
+                  -extend_exact => 1);
 
 # set up assembly FASTA objects:
 $ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);
@@ -59,13 +63,22 @@ $query_fasta = $delta_obj->{query_file} if (!$query_fasta);
 my $ref_db = GTB::FASTA->new($ref_fasta);
 my $query_db = GTB::FASTA->new($query_fasta);
 
-my $regions_fh = Open($regions_file); # regions to refine
+my @ref_entries = $ref_db->ids(); # ordered as in fasta index
+my $rh_regions = read_regions_file($regions_file);
 
-process_regions($delta_obj, $regions_fh, $vcf_fh, $refregions_fh, $ref_db, $query_db);
+foreach my $chrom (@ref_entries) {
+    my $ra_regions = $rh_regions->{$chrom};
+    if ($ra_regions) {
+        my $ra_variant_lines = [];
+        my $ra_ref_cov = []; # regions covered with a reference-matching contig
+        process_region($chrom, $ra_regions, $delta_obj, $nocovregions_fh, $ref_db, $query_db, $ra_variant_lines, $ra_ref_cov); # populates $ra_variant_lines, $ra_ref_cov
+        write_variants_to_vcf($outvcf_fh, $refregions_fh, $ra_variant_lines, $ra_ref_cov);
+    }
+}
 
-close $vcf_fh;
-close $regions_fh;
+close $outvcf_fh;
 close $refregions_fh;
+close $nocovregions_fh;
 
 #------------
 # End MAIN
@@ -73,9 +86,9 @@ close $refregions_fh;
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( samplename => 'SAMPLE', buffer => 1000, bufseg => 50 );
-    GetOptions(\%Opt, qw( delta=s regions=s ref_fasta=s query_fasta=s outvcf=s buffer=i 
-                           bufseg=i verbose includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
+    %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0 );
+    GetOptions(\%Opt, qw( delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s nocov=s buffer=i 
+                           bufseg=i maxsize=i verbose includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVrefine.pl, ", q$Revision: 7771 $, "\n"; }
@@ -94,7 +107,42 @@ sub process_commandline {
         print STDERR "Must specify a VCF file path to output confirmed variants!\n"; 
         pod2usage(0);
     }
+
+    if (!$Opt{outref}) { 
+        $Opt{outref} = $Opt{outvcf};
+        $Opt{outref} =~ s/\.vcf(\..*){0,1}$//;
+        $Opt{outref} .= '.homref.bed';
+    }
+    
+    if (!$Opt{nocov}) { 
+        $Opt{nocov} = $Opt{outvcf};
+        $Opt{nocov} =~ s/\.vcf(\..*){0,1}$//;
+        $Opt{nocov} .= '.nocov.bed';
+    }
 }
+
+sub read_regions_file {
+    my $regions_file = shift;
+
+    my $regions_fh = Open($regions_file); # regions to refine
+
+    my %regions_hash = (); # by chromosome, then list of regions
+    while (<$regions_fh>) {
+        if (/^(\S+)\s(\d+)\s(\d+)/) {
+            my ($chrom, $start, $end) = ($1, $2, $3);
+            $start++; # 0-based to 1-based
+            if ($end < $start) {
+                die "End less than start illegal bed format: $_";
+            }
+            push @{$regions_hash{$chrom}}, [$start, $end];
+        }
+    }
+
+    close $regions_fh;
+
+    return {%regions_hash};
+
+} ## end read_regions_file
 
 sub write_header {
     my $fh = shift;
@@ -120,36 +168,33 @@ sub write_header {
     print $fh "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
     print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
     print $fh "##FORMAT=<ID=GTMATCH,Number=1,Type=Character,Description=\"Genotype match type: E=Exact match, H=Position boundary match, L=Inexact match\">\n";
-    print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n";
+    print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n";
 }
 
-sub process_regions {
+sub process_region {
+    my $chrom = shift;
+    my $ra_regions = shift;
     my $delta_obj = shift;
-    my $regions_fh = shift;
-    my $outvcf_fh = shift;
-    my $outref_fh = shift;
+    my $outnc_fh = shift;
     my $ref_db = shift;
     my $query_db = shift;
+    my $ra_vcf_lines = shift;
+    my $ra_ref_coverage = shift;
 
     # examine regions for broken alignments:
 
     my $rh_ref_entrypairs = $delta_obj->{refentrypairs}; # store entry pairs by ref entry for quick retrieval
     my $rh_query_entrypairs = $delta_obj->{queryentrypairs}; # store entry pairs by query entry for quick retrieval
 
-    while (<$regions_fh>) {
-        chomp;
-        my ($chr, $start, $end, $remainder) = split /\s/, $_;
-        $start++; # 0-based to 1-based
-        if ($end < $start) {
-            die "End less than start illegal bed format: $_";
-        }
+    my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
 
-        if (!check_region($ref_db, $chr, $start, $end)) {
-            print "SKIPPING REGION $chr\t$start\t$end because it is too close to chromosome end!\n" if ($Opt{verbose});
+    foreach my $ra_region (@{$ra_regions}) {
+        my ($start, $end) = @{$ra_region};
+
+        if (!check_region($ref_db, $chrom, $start, $end)) {
+            print STDERR "SKIPPING REGION $chrom\t$start\t$end because it is too close to chromosome end!\n" if ($Opt{verbose});
             next;
         }
-
-        my $ra_rentry_pairs = $rh_ref_entrypairs->{$chr}; # everything aligning to this chromosome
 
         # check small regions to the left and right of region of interest for aligning contigs:
         my $refleftstart = $start - $Opt{buffer};
@@ -159,57 +204,52 @@ sub process_regions {
 
         # find entries with at least one align spanning left and right contig align, with same comp value (can be a single align, or more than one)
 
+        print STDERR "PROCESSING REGION $chrom\t$start\t$end\n" if ($Opt{verbose});
         my @valid_entry_pairs = find_valid_entry_pairs($ra_rentry_pairs, $refleftstart, $refleftend, $refrightstart, $refrightend);
 
         if (!@valid_entry_pairs) { # no consistent alignments across region
-            print $outref_fh "NOCOV\t$chr\t$start\t$end\n";
+            print $outnc_fh "$chrom\t$start\t$end\n";
             next;
         }
         
         my @aligned_contigs = map { $_->{query_entry} } @valid_entry_pairs;
         my $contig_string = join ':', @aligned_contigs;
         my $no_entry_pairs = @valid_entry_pairs;
-        print "VALID PAIRS $chr\t$start\t$end $no_entry_pairs aligning contigs: $contig_string\n" if (($no_entry_pairs > 1) && ($Opt{verbose}));
+        print STDERR "VALID PAIRS $chrom\t$start\t$end $no_entry_pairs aligning contigs: $contig_string\n" if ($Opt{verbose});
 
         my @refaligns = ();
         foreach my $rh_rentry_pair (@valid_entry_pairs) { # for each contig aligned across region
             my $contig = $rh_rentry_pair->{query_entry};
-            my $ra_qentry_pairs = $rh_query_entrypairs->{$contig};
+            my $ra_qentry_pairs = $rh_query_entrypairs->{$contig}; # retrieve all alignments for this contig, i.e., "contig_aligns"
             my @contig_aligns = ();
             my $comp = $rh_rentry_pair->{comp}; # determines whether to sort contig matches in decreasing contig coordinate order
             foreach my $rh_entrypair (@{$ra_qentry_pairs}) {
                 push @contig_aligns, @{$rh_entrypair->{aligns}};
             }
             my @sorted_contigaligns = ($comp) ? 
-                      sort {$b->{query_start} <=> $a->{query_start}} @contig_aligns : 
-                      sort {$a->{query_start} <=> $b->{query_start}} @contig_aligns;
-            my @region_aligns = (); # will contain only contig alignments in region aligned to reference region
-            my $in_region = 0;
-            foreach my $rh_contigalign (@sorted_contigaligns) {
-                if (!($in_region) && ($rh_contigalign->{ref_entry} eq $chr && $rh_contigalign->{ref_end} > $refleftend)) {
-                    $in_region = 1;
-                }
-                elsif (($in_region) && ($rh_contigalign->{ref_entry} eq $chr && $rh_contigalign->{ref_start} > $refrightend)) {
-                    last;
-                }
+                      sort {($b->{query_start} <=> $a->{query_start}) || ($b->{query_end} <=> $a->{query_end})} @contig_aligns : 
+                      sort {($a->{query_start} <=> $b->{query_start}) || ($a->{query_end} <=> $b->{query_end})} @contig_aligns;
 
-                if ($in_region) {
-                    push @region_aligns, $rh_contigalign;
+            # pull contiguous set of contig alignments in region aligned to reference region:
+            my @region_aligns = pull_region_contig_aligns(\@sorted_contigaligns, $chrom, $refleftend, $refrightstart);
+
+            #my %contigrefentries = map { $_->{ref_entry} => 1 } @region_aligns;
+            #my $refstring = join ':', keys %contigrefentries;
+            #print STDERR "CONTIG $contig matches to ref entries $refstring\n" if ($Opt{verbose});
+
+            # is there only one alignment to $chrom and does it span the region of interest?  If so, store reference coverage for this contig:
+            my @ref_aligns = grep {$_->{ref_entry} eq $chrom} @region_aligns;
+
+            my $nonref_found = 0;
+            foreach my $ref_align (@ref_aligns) {
+                if ($ref_align->{ref_start} < $refleftstart && $ref_align->{ref_end} > $refrightend) {
+                    push @{$ra_ref_coverage}, [$chrom, $ref_align->{ref_start}, $ref_align->{ref_end}, $ref_align->{query_entry}, $ref_align->{query_start}, $ref_align->{query_end}];
+                }
+                else {
+                    $nonref_found = 1;
                 }
             }
-            my @contigrefentries = map { $_->{ref_entry} } @region_aligns;
-            my $refstring = join ':', @contigrefentries;
-            print "CONTIG $contig matches to ref entries $refstring\n" if ($Opt{verbose});
-
-            # is there only one alignment to $chr and does it span the region of interest?  If so, output reference coverage:
-
-            my @ref_aligns = grep {$_->{ref_entry} eq $chr} @region_aligns;
-            if (@ref_aligns == 1 && $ref_aligns[0]->{ref_start} < $refleftstart && 
-                      $ref_aligns[0]->{ref_end} > $refrightend) {
-                my $ref_align = $ref_aligns[0];
-                print $outref_fh "HOMREF\t$chr\t$start\t$end\t$chr\t$ref_align->{ref_start}\t$ref_align->{ref_end}\t$ref_align->{query_entry}\t$ref_align->{query_start}\t$ref_align->{query_end}\n";
-                next;
-            }
+            next if (!$nonref_found);
 
             if (@region_aligns > 1) { # potential SV--print out alignments if verbose option
                 foreach my $rh_align (@region_aligns) {
@@ -220,29 +260,29 @@ sub process_regions {
                     my $query_start = $rh_align->{query_start};
                     my $query_end = $rh_align->{query_end};
     
-                    print "ALIGN\t$chr\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n" if ($Opt{verbose});
+                    print STDERR "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n" if ($Opt{verbose});
                 }
             }
 
-            # find left and right matches among aligns:
+            # if three or fewer alignments all to desired chrom, find left and right matches among aligns (or, at some point, deal with inversions):
            
-            if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chr} @region_aligns)) { # simple insertion, deletion, or inversion
+            if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chrom} @region_aligns)) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
                 my @inversion_aligns = ();
                 if (@region_aligns == 2 && $region_aligns[0]->{comp} == $region_aligns[1]->{comp}) {
-                    # order them, if possible:
+                    # order them, if possible, checking for consistency:
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1]);
-                    print "ONE SIMPLE BREAK\n" if (@simple_breaks==1);
+                    print STDERR "ONE SIMPLE BREAK\n" if (@simple_breaks==1);
                 }
-                elsif (($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
+                elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
                     ($region_aligns[1]->{comp} == $region_aligns[2]->{comp})) {
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print "TWO SIMPLE BREAKS\n" if (@simple_breaks==2);
+                    print STDERR "TWO SIMPLE BREAKS\n" if (@simple_breaks==2);
                 }
-                elsif (($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
+                elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
                        ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
                     @inversion_aligns = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print "INVERSION!\n";
+                    print STDERR "INVERSION!\n";
                 }
 
                 foreach my $ra_simple_break (@simple_breaks) {
@@ -255,11 +295,11 @@ sub process_regions {
                
                     my $query1 = $left_align->{query_end}; 
                     my $query2 = $right_align->{query_start}; 
-
                     my $queryjump = ($comp) ? $query1 - $query2 - 1 : $query2 - $query1 - 1; # from show-diff code--number of unaligned bases
-                    my $svsize = $refjump - $queryjump;
+
+                    my $svsize = $refjump - $queryjump; # negative for insertions/positive for deletions
                  
-                    my $type = ($refjump <= 0 && $queryjump <= 0) ? (($svsize < 0) ? 'DUP' : 'CONTRAC') :
+                    my $type = ($refjump < 0 && $queryjump < 0) ? (($svsize < 0) ? 'DUP' : 'CONTRAC') :
                                (($svsize < 0 ) ? 'SIMPLEINS' : 'SIMPLEDEL'); # we reverse this later on so that deletions have negative SVLEN
 
                     if (($svsize < 0) && ($refjump > 0)) {
@@ -268,27 +308,33 @@ sub process_regions {
                     elsif (($svsize > 0) && ($queryjump > 0)) {
                         $type = 'SUBSDEL';
                     }
-                    elsif ($svsize == 0) { # is this even possible?
-                        $type = 'SUBS';
+                    elsif ($svsize == 0) { # is this even possible?--yes, but these look like alignment artifacts
+                        next;
                     }
                     $svsize = abs($svsize);
                     my $repeat_bases = ($type eq 'SIMPLEINS' || $type eq 'DUP') ? -1*$refjump : 
                                         (($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') ? -1*$queryjump : 0);
   
-                    if ($repeat_bases > 100*$svsize) { # likely alignment artifact?
+                    if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
                         next;
                     }
-                    print "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
+
+                    if ($svsize > $Opt{maxsize}) {
+                        print STDERR "SKIPPING $type of size $svsize because it is larger than max size ($Opt{maxsize})\n";
+                        next;
+                    }
+
+                    print STDERR "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
     
                     if ($type eq 'SIMPLEINS' || $type eq 'DUP') {
-                        process_insertion($delta_obj, $left_align, $right_align, $chr, $contig,
+                        process_insertion($delta_obj, $left_align, $right_align, $chrom, $contig,
                               $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
-                              $refjump, $queryjump, $repeat_bases, $outvcf_fh);
+                              $refjump, $queryjump, $repeat_bases, $ra_vcf_lines);
                     }
                     elsif ($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') {
-                        process_deletion($delta_obj, $left_align, $right_align, $chr, $contig,
+                        process_deletion($delta_obj, $left_align, $right_align, $chrom, $contig,
                               $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
-                              $refjump, $queryjump, $repeat_bases, $outvcf_fh);
+                              $refjump, $queryjump, $repeat_bases, $ra_vcf_lines);
                     }
                     else {
                         my $altpos = ($comp) ? $query1 - 1 : $query1 + 1;
@@ -296,7 +342,7 @@ sub process_regions {
                         my $rh_var = {'type' => $type,
                                       'svsize' => $svsize,
                                       'repbases' => 0,
-                                      'chrom' => $chr,
+                                      'chrom' => $chrom,
                                       'pos' => $ref1 + 1,
                                       'end' => $ref2 - 1,
                                       'contig' => $contig,
@@ -310,30 +356,28 @@ sub process_regions {
                                       'queryjump' => $queryjump,
                                       'comp' => $comp,
                                      };
-                        write_simple_variant($outvcf_fh, $rh_var);
+                        write_simple_variant($ra_vcf_lines, $rh_var);
                     }
                 }
 
                 # is it an inversion?
                 if (@inversion_aligns) {
-
+                    # OOPS! Not implemented yet
                 }
             }
         }
     }
-
-    close $regions_fh;
 }
 
 sub check_region {
     my $ref_db = shift;
-    my $chr = shift;
+    my $chrom = shift;
     my $start = shift;
     my $end = shift;
 
-    my $chrlength = $ref_db->len($chr);
+    my $chrlength = $ref_db->len($chrom);
     if ((0 >= $start - $Opt{buffer}) || ($chrlength < $end + $Opt{buffer})) {
-        print "REGION $chr:$start-$end is too close to an end of the chromosome $chr!\n";
+        print STDERR "REGION $chrom:$start-$end is too close to an end of the chromosome $chrom!\n";
         return 0;
     }
     else {
@@ -349,36 +393,60 @@ sub find_valid_entry_pairs {
     my $ref_right_end = shift;
 
     my @valid_entry_pairs = ();
-    foreach my $rh_entrypair (@{$ra_rentry_pairs}) {
-        my @left_span_aligns = grep {$_->{ref_start} < $ref_left_start && $_->{ref_end} > $ref_left_end} @{$rh_entrypair->{aligns}};
-        my @right_span_aligns = grep {$_->{ref_start} < $ref_right_start && $_->{ref_end} > $ref_right_end} @{$rh_entrypair->{aligns}};
+    foreach my $rh_entrypair (@{$ra_rentry_pairs}) { # each contig with alignments to this reference entry
+        my @left_span_aligns = grep {$_->{ref_start} < $ref_left_start && $_->{ref_end} > $ref_left_end} @{$rh_entrypair->{aligns}}; # aligns that span left
+        my @right_span_aligns = grep {$_->{ref_start} < $ref_right_start && $_->{ref_end} > $ref_right_end} @{$rh_entrypair->{aligns}}; # aligns that span right
         if (!(@left_span_aligns) || !(@right_span_aligns)) { # need to span both sides
             next;
         }
         else {
             my $no_left_aligns = @left_span_aligns;
             my $no_right_aligns = @right_span_aligns;
-            if ($no_left_aligns != 1 || $no_right_aligns != 1) {
-                print "Found $no_left_aligns left aligns and $no_right_aligns right aligns!\n";
-            }
+            print STDERR "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n";
         }
 
         # want to find the same comp value on left and right side:
         if (grep {$_->{comp} == 0} @left_span_aligns && grep {$_->{comp} == 0} @right_span_aligns) {
             $rh_entrypair->{comp} = 0;
             push @valid_entry_pairs, $rh_entrypair;
+            print STDERR "At least one forward alignment on left and right\n";
         }
         elsif (grep {$_->{comp} == 1} @left_span_aligns && grep {$_->{comp} == 1} @right_span_aligns) {
             $rh_entrypair->{comp} = 1;
             push @valid_entry_pairs, $rh_entrypair;
+            print STDERR "At least one reverse alignment on left and right\n";
         }
         else {
-            print "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";
+            print STDERR "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";
             next;
         }
     }
 
     return @valid_entry_pairs;
+}
+
+sub pull_region_contig_aligns {
+    my $ra_contigaligns = shift;
+    my $chrom = shift;
+    my $refleftend = shift;
+    my $refrightstart = shift;
+
+    my $in_region = 0;
+    my @region_aligns = ();
+    foreach my $rh_contigalign (@{$ra_contigaligns}) { # these should in theory be stepping up through the reference, down through the contig for comp aligns
+        if (!($in_region) && ($rh_contigalign->{ref_entry} eq $chrom && $rh_contigalign->{ref_end} > $refleftend)) {
+           $in_region = 1;
+        }
+        elsif (($in_region) && ($rh_contigalign->{ref_entry} eq $chrom && $rh_contigalign->{ref_start} > $refrightstart)) {
+            last;
+        }
+
+        if ($in_region) {
+            push @region_aligns, $rh_contigalign;
+        }
+    }
+
+    return @region_aligns;
 }
 
 sub find_breaks {
@@ -389,9 +457,8 @@ sub find_breaks {
     # that represent breaks corresponding to structural variants
 
     my @valid_breaks = ();
-    my @sorted_aligns = sort {$a->{ref_start} <=> $b->{ref_start}} @aligns;
-    for (my $left_index = 0; $left_index <= $#sorted_aligns - 1; $left_index++) {
-        print "LEFTINDEX=$left_index!\n";
+    my @sorted_aligns = sort {($a->{ref_start} <=> $b->{ref_start}) || ($a->{ref_end} <=> $b->{ref_end})} @aligns;
+    for (my $left_index = 0; $left_index <= $#sorted_aligns - 1; $left_index++) { # consider consecutive pairs
         my $left_align = $sorted_aligns[$left_index];
         my $right_align = $sorted_aligns[$left_index + 1];
 
@@ -408,11 +475,11 @@ sub find_breaks {
                 push @valid_breaks, [$left_align, $right_align];
             }
             else {
-                print "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
+                print STDERR "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
             }
         }
         else {
-            print "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
+            print STDERR "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
         }
     }
 
@@ -423,7 +490,7 @@ sub process_insertion {
     my $delta_obj = shift;
     my $left_align = shift;
     my $right_align = shift;
-    my $chr = shift;
+    my $chrom = shift;
     my $contig = shift;
     my $ref1 = shift;
     my $query1 = shift;
@@ -435,13 +502,13 @@ sub process_insertion {
     my $refjump = shift;
     my $queryjump = shift;
     my $repeat_bases = shift;
-    my $outvcf_fh = shift;
+    my $ra_vcf_lines = shift;
 
-    print "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chr ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
-    print "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
+    print STDERR "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chrom ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
+    print STDERR "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
 
-    $delta_obj->find_query_coords_from_ref_coord($ref1, $chr);
-    $delta_obj->find_query_coords_from_ref_coord($ref2, $chr);
+    $delta_obj->find_query_coords_from_ref_coord($ref1, $chrom);
+    $delta_obj->find_query_coords_from_ref_coord($ref2, $chrom);
 
     if (!$left_align->{query_matches}->{$ref1} || $query1 != $left_align->{query_matches}->{$ref1}) {
         die "QUERY1 $query1 doesn\'t match $left_align->{query_matches}->{$ref1}\n"; 
@@ -454,14 +521,14 @@ sub process_insertion {
     my $query1p = $right_align->{query_matches}->{$ref1};
     my $query2p = $left_align->{query_matches}->{$ref2};
 
-    print "query1p $query1p corresponds to ref $ref1 in second align, query2p $query2p corresponds to ref2 $ref2 in first align\n" if ($Opt{verbose});
+    print STDERR "query1p $query1p corresponds to ref $ref1 in second align, query2p $query2p corresponds to ref2 $ref2 in first align\n" if ($Opt{verbose});
 
     if (!defined($query1p)) {
-        print "NONREPETITIVE INSERTION--need to check\n";
+        print STDERR "NONREPETITIVE INSERTION--need to check\n";
         $query1p = $query2 - 1;
     }
     if (!defined($query2p)) {
-        print "NONREPETITIVE INSERTION--need to check\n";
+        print STDERR "NONREPETITIVE INSERTION--need to check\n";
         $query2p = $query1 - 1;
     }
 
@@ -470,7 +537,7 @@ sub process_insertion {
     my $rh_var = {'type' => $type,
                   'svsize' => -1.0*$svsize,
                   'repbases' => $repeat_bases,
-                  'chrom' => $chr,
+                  'chrom' => $chrom,
                   'pos' => $ref2 - 1,
                   'end' => $ref2 - 1,
                   'contig' => $contig,
@@ -487,14 +554,14 @@ sub process_insertion {
                   'query2p' => $query2p,
                   };
 
-    write_simple_variant($outvcf_fh, $rh_var);
+    write_simple_variant($ra_vcf_lines, $rh_var);
 }
 
 sub process_deletion {
     my $delta_obj = shift;
     my $left_align = shift;
     my $right_align = shift;
-    my $chr = shift;
+    my $chrom = shift;
     my $contig = shift;
     my $ref1 = shift;
     my $query1 = shift;
@@ -506,10 +573,10 @@ sub process_deletion {
     my $refjump = shift;
     my $queryjump = shift;
     my $repeat_bases = shift;
-    my $outvcf_fh = shift;
+    my $ra_vcf_lines = shift;
 
-    print "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chr ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
-    print "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
+    print STDERR "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chrom ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
+    print STDERR "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
 
     $delta_obj->find_ref_coords_from_query_coord($query1, $contig);
     $delta_obj->find_ref_coords_from_query_coord($query2, $contig);
@@ -525,23 +592,23 @@ sub process_deletion {
     my $ref1p = $right_align->{ref_matches}->{$query1};
     my $ref2p = $left_align->{ref_matches}->{$query2};
 
-    print "ref1p $ref1p corresponds to query $query1 in second align, ref2p $ref2p corresponds to query2 $query2 in first align\n" if ($Opt{verbose});
-
     if (!defined($ref1p)) {
-        print "NONREPETITIVE DELETION--need to check\n";
+        print STDERR "NONREPETITIVE DELETION (ref1p undefined)--need to check\n";
         $ref1p = $ref2 - 1;
     }
     if (!defined($ref2p)) {
-        print "NONREPETITIVE DELETION--need to check\n";
-        $ref2p = $ref1 - 1;
+        print STDERR "NONREPETITIVE DELETION (ref2p undefined)--need to check\n";
+        $ref2p = $ref1 + 1;
     }
+
+    print STDERR "ref1p $ref1p corresponds to query $query1 in second align, ref2p $ref2p corresponds to query2 $query2 in first align\n" if ($Opt{verbose});
 
     my $altpos = ($comp) ? $query2 + 1 : $query2 - 1;
     my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
     my $rh_var = {'type' => $type,
                   'svsize' => -1.0*$svsize,
                   'repbases' => $repeat_bases,
-                  'chrom' => $chr,
+                  'chrom' => $chrom,
                   'pos' => $ref2p - 1,
                   'end' => $ref2 - 1,
                   'contig' => $contig,
@@ -558,11 +625,11 @@ sub process_deletion {
                   'ref2p' => $ref2p,
                  };
 
-    write_simple_variant($outvcf_fh, $rh_var);
+    write_simple_variant($ra_vcf_lines, $rh_var);
 }
 
 sub write_simple_variant {
-    my $fh = shift;
+    my $ra_vcf_lines = shift;
     my $rh_var = shift;
 
     my $vartype = $rh_var->{type};
@@ -586,21 +653,37 @@ sub write_simple_variant {
     my $ref1p = $rh_var->{ref1p};
     my $ref2p = $rh_var->{ref2p};
 
+    my $chrlength = $ref_db->len($chrom);
+    my $varcontiglength = $query_db->len($varcontig);
+
     if ($vartype eq 'SIMPLEINS' || $vartype eq 'DUP') {
         my ($refseq, $altseq) = ('N', '<INS>');
         $svsize = abs($svsize); # insertions always positive
+
         if ($Opt{includeseqs}) {
-            $refseq = uc($ref_db->seq($chrom, $pos, $pos));
+            if ($pos >= 1 && $pos <= $chrlength) {
+                $refseq = uc($ref_db->seq($chrom, $pos, $pos));
+            }
+            else {
+                print "Ref position of $vartype at $pos is not within chromosome $chrom boundaries--skipping!\n";
+                return;
+            }
+
             if ($altpos > $altend) { # extract and check:
                 $altseq = uc($query_db->seq($varcontig, $altend, $altpos)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
                 if ($altseq =~ /[^ATGCatgcNn]/) { # foundit!
                     die "Seq $varcontig:$altend-$altpos has non ATGC char!\n";
                 }
             }
-            print "Retrieving $varcontig:$altpos-$altend\n";
-            $altseq = uc($query_db->seq($varcontig, $altpos, $altend)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
-            if (($comp) && ($altpos == $altend)) { # need to complement altseq
-                $altseq =~ tr/ATGCatgc/TACGtacg/;
+            if (($altpos >= 1 && $altpos <= $varcontiglength) && ($altend >= 1 && $altend <= $varcontiglength)) {
+                $altseq = uc($query_db->seq($varcontig, $altpos, $altend)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
+                if (($comp) && ($altpos == $altend)) { # need to complement altseq
+                    $altseq =~ tr/ATGCatgc/TACGtacg/;
+                }
+            }
+            else {
+                print "Varcontig positions of $vartype at $varcontig:$altpos-$altend are not within contig $varcontig boundaries--skipping!\n";
+                return;
             }
         }
 
@@ -608,14 +691,12 @@ sub write_simple_variant {
         my $svtype = 'INS';
 
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2-$ref1;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query2p-$query1p$compstring";
-        print $fh "$varstring\n";
+        push @{$ra_vcf_lines}, "$varstring";
     }
     elsif ($vartype eq 'SIMPLEDEL' || $vartype eq 'CONTRAC') {
         my ($refseq, $altseq) = ('N', '<DEL>');
         $svsize = -1.0*abs($svsize); # deletions always negative
         if (!$repbases) { # kludgy for now
-            $pos++;
-            $end--;
             $ref2p++;
             if ($comp) {
                 $query2++;
@@ -624,18 +705,33 @@ sub write_simple_variant {
                 $query2--;
             }
         }
+        if ($pos > $end) {
+            die "Deletion position $pos is greater than endpoint $end for $chrom:$pos, svlen $svsize, breaksimlength $repbases\n";
+        }
         if ($Opt{includeseqs}) {
-            $refseq = uc($ref_db->seq($chrom, $pos, $end));
-            $altseq = uc($query_db->seq($varcontig, $altpos, $altpos));
-            if ($comp) {
-                $altseq =~ tr/ATGC/TACG/;
+            if ($pos >= 1 && $end <= $chrlength) {
+                $refseq = uc($ref_db->seq($chrom, $pos, $end));
+            }
+            else {
+                print "Ref position of $vartype at $pos-$end is not within chromosome $chrom boundaries--skipping!\n";
+                return;
+            }
+            if ($altpos >= 1 && $altpos <= $varcontiglength) {
+                $altseq = uc($query_db->seq($varcontig, $altpos, $altpos));
+                if ($comp) { # need to complement altseq
+                    $altseq =~ tr/ATGC/TACG/;
+                }
+            }
+            else {
+                print "Varcontig positions of $vartype at $varcontig:$altpos-$altpos are not within contig $varcontig boundaries--skipping!\n";
+                return;
             }
         }
         my $svtype = 'DEL';
 
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;ALTPOS=$varcontig:$altpos-$altpos$compstring;ALTWIDENED=$varcontig:$query2-$query1$compstring";
-        print $fh "$varstring\n";
+        push @{$ra_vcf_lines}, "$varstring";
     }
     else { # complex "SUBS" types--note, this code is NOT appropriate for inversions!
         my ($refseq, $altseq) = ('N', 'N');
@@ -649,9 +745,61 @@ sub write_simple_variant {
                 $altseq =~ tr/ATGC/TACG/;
             }
         }
+
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref1-$ref2;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query1-$query2$compstring";
-        print $fh "$varstring\n";
+        push @{$ra_vcf_lines}, "$varstring";
+    }
+}
+
+sub write_variants_to_vcf {
+    my $vcf_fh = shift;
+    my $ref_fh = shift;
+    my $ra_variant_lines = shift;
+    my $ra_ref_cov = shift;
+
+    # write VCF lines in order, adding genotypes and avoiding redundancy:
+    my @sorted_vcf_lines = sort byposthenend @{$ra_variant_lines};
+
+    my %written = ();
+    foreach my $vcf_line (@sorted_vcf_lines) {
+        my ($pos, $end) = ($vcf_line =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
+        my $gt = covered($ra_ref_cov, $pos, $end) ? '0/1' : '1';
+        if (!$written{"$pos:$end"}) {
+            print $vcf_fh "$vcf_line\tGT\t$gt\n";
+            $written{"$pos:$end"} = 1;
+        }
+    }
+
+    # write reference regions to BED formatted "ref coverage" file
+    foreach my $ra_refregion (sort {$a->[1] <=> $b->[1]} @{$ra_ref_cov}) {
+        my $region_line = join "\t", @{$ra_refregion};
+        print $ref_fh "$region_line\n";
+    }
+}
+
+sub covered {
+    my $ra_ref_cov = shift;
+    my $pos = shift;
+    my $end = shift;
+
+    foreach my $ra_hr (@{$ra_ref_cov}) {
+        if ($ra_hr->[1] <= $pos && $ra_hr->[2] >= $end) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+sub byposthenend {
+    my ($pos_a, $end_a) = ($a =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
+    my ($pos_b, $end_b) = ($b =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
+
+    if ($pos_a != $pos_b) {
+        return $pos_a <=> $pos_b;
+    }
+    else { # equal starts, sort ends:
+        return $end_a <=> $end_b;
     }
 }
 
@@ -703,6 +851,10 @@ of the VCF header.
 
 Specify a string to be written as the sample name in the header specifying a 
 genotype column in the VCF line beginning with "CHROM".
+
+=item B<--maxsize <maximum size of SV to report>>
+
+Specify an integer for the maximum size of SV to report. 
 
 =item B<--noheader>
 

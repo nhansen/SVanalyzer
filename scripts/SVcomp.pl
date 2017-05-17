@@ -50,27 +50,58 @@ while (<$vcf1_fh>) {
     next if (/^#/);
 
     my $vcf1_line = $_;
-    my ($chr1, $start1, $end1, $id1, $ref1, $alt1) = parse_vcf_line($vcf1_line);
+    my ($chr1, $pos1, $end1, $id1, $ref1, $alt1) = parse_vcf_line($vcf1_line);
 
     my $vcf2_line = <$vcf2_fh>;
     while ($vcf2_line =~ /^#/) {
         $vcf2_line = <$vcf2_fh>;
     }
 
-    my ($chr2, $start2, $end2, $id2, $ref2, $alt2) = parse_vcf_line($vcf2_line);
+    my ($chr2, $pos2, $end2, $id2, $ref2, $alt2) = parse_vcf_line($vcf2_line);
 
-    # boundaries of constructed haplotype:
+    my $reflength1 = length($ref1);
+    my $reflength2 = length($ref2);
+    my $altlength1 = length($alt1);
+    my $altlength2 = length($alt2);
 
-    my $left_bound = ($start1 < $start2) ? $start1 - $Opt{buffer} : $start2 - $Opt{buffer};
-    my $right_bound = ($end1 < $end2) ? $end2 + $Opt{buffer} : $end1 + $Opt{buffer};
-    my $alt_hap1 = construct_alt_hap($fai_obj, $chr1, $left_bound, $right_bound, $start1, $end1, \$ref1, \$alt1);
-    my $alt_hap2 = construct_alt_hap($fai_obj, $chr2, $left_bound, $right_bound, $start2, $end2, \$ref2, \$alt2);
+    if ($chr1 ne $chr2) {
+        print "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+        $varpairindex++;
+        next;
+    }
 
-    # align the alternative haplotypes to each other and evaluate
+    my $size1 = $reflength1 - $altlength1;
+    my $size2 = $reflength2 - $altlength2;
 
-    compare_haplotypes(\$alt_hap1, \$alt_hap2, $varpairindex, $id1, $id2);
+    my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
+
+    if (potential_aligning_lengths($size1, $size2)) { # essentially, one SV's size is not more than twice the size of the other
+        # boundaries of constructed haplotype:
+    
+        my $left_bound = ($pos1 < $pos2) ? $pos1 : $pos2;
+        my $right_bound = ($end1 < $end2) ? $end2 : $end1;
+        my $alt_hap1 = construct_alt_hap($fai_obj, $chr1, $left_bound, $right_bound, $pos1, $end1, \$ref1, \$alt1);
+        my $alt_hap2 = construct_alt_hap($fai_obj, $chr2, $left_bound, $right_bound, $pos2, $end2, \$ref2, \$alt2);
+        my $minhaplength = (length($alt_hap1) < length($alt_hap2)) ? length($alt_hap1) : length($alt_hap2);
+    
+        if ($alt_hap1 eq $alt_hap2) { # identical variants
+            print "$varpairindex\t$id1\t$id2\tEXACTMATCH\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+        }
+        else {
+            # align the alternative haplotypes to each other and evaluate
+            my ($maxshift, $editdistance) = compare_haplotypes(\$alt_hap1, \$alt_hap2, $varpairindex);
+            if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
+                print "$varpairindex\t$id1\t$id2\tNWMATCH\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
+            }
+            else {
+                print "$varpairindex\t$id1\t$id2\tNWFAIL\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
+            }
+        }
+    }
+    else {
+        print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+    }
     $varpairindex++;
-
 }
 
 close $vcf1_fh;
@@ -82,11 +113,11 @@ close $vcf2_fh;
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( buffer => 100, workdir => '.' );
-    GetOptions(\%Opt, qw( ref=s ignore_length check_ref buffer=s workdir=s cleanup manual help+ version)) || pod2usage(0);
+    %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50 );
+    GetOptions(\%Opt, qw( ref=s ignore_length check_ref workdir=s cleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
-    if ($Opt{version}) { die "SVcomp.pl, ", q$Revision: 7772 $, "\n"; }
+    if ($Opt{version}) { die "SVcomp.pl, ", q$Revision:$, "\n"; }
     # If non-option arguments are required, uncomment next line
     pod2usage("SVcomp.pl --ref first_vcf.vcf second_vcf.vcf") if !@ARGV;
 
@@ -98,7 +129,6 @@ sub process_commandline {
 sub parse_vcf_line {
     my $vcf_line = shift;
 
-    #print "$vcf_line\n";
     if ($vcf_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
         my ($chr, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
         $ref = uc($ref);
@@ -145,13 +175,11 @@ sub construct_alt_hap {
     my $alt_allele = uc($fai_obj->fetch("$chr:$left-$right"));
     my $offset = $start - $left;
     my $length = $end - $start + 1;
-    #print "Subseting offset $offset, length $length\n";
     my $extracted_ref = substr($alt_allele, $offset, $length); 
     if (($Opt{check_ref}) && ($extracted_ref ne ${$r_ref})) {
         die "Extracted reference for $chr:$start-$end does not match provided REF!\n";
     }
 
-    #print "Replacing ref at offset $offset, length $length with ${$r_alt}\n";
     substr($alt_allele, $offset, $length) = ${$r_alt}; 
 
     return $alt_allele;
@@ -161,59 +189,51 @@ sub compare_haplotypes {
     my $r_alt1 = shift;
     my $r_alt2 = shift;
     my $pair_id = shift;
-    my $id1 = shift;
-    my $id2 = shift;
 
-    my $length1 = length(${$r_alt1});
-    my $length2 = length(${$r_alt2});
+    my $tmpfasta1 = "$workingdir/alt1.$pair_id.fa";
+    write_fasta_file($tmpfasta1, "Pair$pair_id.alt1", $r_alt1);
+    my $tmpfasta2 = "$workingdir/alt2.$pair_id.fa";
+    write_fasta_file($tmpfasta2, "Pair$pair_id.alt2", $r_alt2);
 
-    my $seq1_fh = Open("$workingdir/alt1.$pair_id.fa", "w"); 
-    print $seq1_fh ">Pair$pair_id.alt1\n";
-    my $r_alt1_50 = format_50($r_alt1);
-    print $seq1_fh ${$r_alt1_50};
-    if (${$r_alt1_50} !~ /\n$/) {
-        print $seq1_fh "\n";
-    }
-    close $seq1_fh;
-
-    my $seq2_fh = Open("$workingdir/alt2.$pair_id.fa", "w"); 
-    print $seq2_fh ">Pair$pair_id.alt2\n";
-    my $r_alt2_50 = format_50($r_alt2);
-    print $seq2_fh ${$r_alt2_50};
-    if (${$r_alt2_50} !~ /\n$/) {
-        print $seq2_fh "\n";
-    }
-    close $seq2_fh;
-
-    my $delta_file = run_mummer("$workingdir/alt1.$pair_id.fa", "$workingdir/alt2.$pair_id.fa", "pair$pair_id");
-    my $mummer_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file);
-    my $ra_entrypairs = $mummer_obj->{entry_pairs} || [];
-    my $no_pairs = @{$ra_entrypairs};
-    if ($no_pairs != 1) {
-        print "NOMATCH: pair $pair_id $no_pairs entry pairs $id1 $id2 $length1 $length2\n";
+    my $edlib_aligner = '/home/nhansen/projects/SVanalyzer/edlib/edlib-1.1.2/build/bin/edlib-aligner';
+    my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
+    if ($nw_output =~ /Cigar:\n(.*)/m) {
+        my $cigar_string = $1;
+        my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';
+        my $maxshift = calc_max_shift($cigar_string);
+        return ($maxshift, $score);
     }
     else {
-        my $rh_pairentry = $ra_entrypairs->[0];
-        my $match_found = 0;
-        foreach my $rh_align (@{$rh_pairentry->{aligns}}) {
-            my $start1 = $rh_align->{ref_start};
-            my $end1 = $rh_align->{ref_end};
-            my $start2 = $rh_align->{query_start};
-            my $end2 = $rh_align->{query_end};
-            my $cigar_string = $rh_align->{cigar_string};
-            my $mismatches = $rh_align->{mismatches};
-            if ($start1 < 5 && $start2 < 5 && $length1 - $end1 < 5 and $length2 - $end2 < 5) {
-                print "Pair$pair_id $id1 $id2 $start1-$end1 (length $length1) matches $start2-$end2 (length $length2) $mismatches mismatches $cigar_string\n";
-                $match_found = 1;
-            }
-            else {
-                #print "pair $pair_id NONGLOBAL\n";
-            }
-        }
-        if (!$match_found) {
-            print "NOMATCH: pair $pair_id $no_pairs entry pairs $id1 $id2 $length1 $length2\n";
-        }
+        return ('NA', 'NA');
     }
+}
+
+sub potential_aligning_lengths {
+    my $size1 = shift;
+    my $size2 = shift;
+
+    my $minsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
+    if (abs($size1 - $size2) >= $minsize) {
+        return 0;
+    }
+    else {
+        return 1;
+    }
+}
+
+sub write_fasta_file {
+    my $fasta_file = shift;
+    my $seq_id = shift;
+    my $r_sequence = shift;
+
+    my $seq_fh = Open("$fasta_file", "w"); 
+    print $seq_fh ">seq_id\n";
+    my $r_alt_50 = format_50($r_sequence);
+    print $seq_fh ${$r_alt_50};
+    if (${$r_alt_50} !~ /\n$/) {
+        print $seq_fh "\n";
+    }
+    close $seq_fh;
 }
 
 # format a sequence string for writing to FASTA file
@@ -236,6 +256,34 @@ sub format_50 {
     }
 
     return \$formattedseq;
+}
+
+sub calc_max_shift {
+    my $cigar = shift;
+
+    my ($max_shift, $current_shift) = (0, 0);
+    #print "Cigar: $cigar\n";
+    while ($cigar) {
+        my ($bases, $op);
+        if ($cigar =~ s/^(\d+)([MDI])//) {
+            ($bases, $op) = ($1, $2);
+            if ($op eq 'D') { # deleted from reference, decrease shift
+                $current_shift -= $bases;
+            }
+            elsif ($op eq 'I') { # deleted from reference--advance ref coord
+                $current_shift += $bases;
+            }
+            if (abs($current_shift) > abs($max_shift)) {
+                $max_shift = $current_shift;
+            }
+        }
+        else {
+            die "Cigar string $cigar is of the wrong form!\n";
+        }
+    }
+    #print "Max shift: $max_shift\n";
+
+    return $max_shift;
 }
 
 sub run_mummer {

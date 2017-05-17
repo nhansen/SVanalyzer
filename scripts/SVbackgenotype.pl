@@ -45,7 +45,8 @@ if (!$rh_sample_info->{$target_sample}) {
     die "Info file passed with --info option must contain a line for the target sample!\n";
 }
 
-my $out_vcf_fh = Open("out.multi.vcf", "w");
+my $output_vcf = $Opt{'outvcf'} || "out.multi.vcf";
+my $out_vcf_fh = Open($output_vcf, "w");
 write_header($out_vcf_fh);
 print $out_vcf_fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
 foreach my $sample (@{$ra_sample_order}) {
@@ -62,7 +63,7 @@ write_multisample_vcf($target_sample, $ra_sample_order, $rh_sample_info, $out_vc
 sub process_commandline {
     # Set defaults here
     %Opt = ( maxdist => 1000 );
-    GetOptions(\%Opt, qw( ref=s target=s info=s maxdist=i manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s target=s info=s maxdist=i outvcf=s skipns manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbackgenotype.pl, ", q$Revision:$, "\n"; }
@@ -80,6 +81,7 @@ sub read_info_file {
     my @sample_order = ();
     while (<$info_fh>) {
         chomp;
+        next if (/^#/); # comment line
         my ($sample, $sample_vcf, $sample_cov_file, $sample_qdelta) = split /\s/, $_;
         $sample_info{$sample} = {vcffile => $sample_vcf, covfile => $sample_cov_file, qdelta_file => $sample_qdelta};
         $sample_info{$sample}->{svs} = read_vcf_variants($sample_vcf);
@@ -102,6 +104,8 @@ sub read_vcf_variants {
     my @variants = ();
     while (<$vcf_fh>) {
         next if (/^#/);
+        my $rh_var = parse_vcf_line($_);
+        next if ($Opt{skipns} && ($rh_var->{refseq} =~ /NNNNNN/ || $rh_var->{altseq} =~ /NNNNNN/));
         push @variants, parse_vcf_line($_);
     }
     close $vcf_fh;
@@ -115,12 +119,14 @@ sub read_ref_coverage {
     my $cov_fh = Open($covfile);
 
     my @ref_regions = ();
+    my %done = ();
     while (<$cov_fh>) {
         chomp;
-        if (/^HOMREF/) {
-            my ($homref, $chrom, $start, $end, $hr_chrom, $hr_start, $hr_end, $hr_contig, $rest) = split /\t/, $_;
-            if (!grep {$_->{chrom} eq $hr_chrom && $_->{start}==$hr_start && $_->{end}==$hr_end && $_->{contig} eq $hr_contig} @ref_regions) {
+        if (/^(\S+)\s(\d+)\s(\d+)\s(\S+)/) {
+            my ($hr_chrom, $hr_start, $hr_end, $hr_contig, $rest) = split /\s/, $_;
+            if (!$done{"$hr_chrom:$hr_start:$hr_end:$hr_contig"}) {
                 push @ref_regions, {chrom => $hr_chrom, start => $hr_start, end => $hr_end, contig => $hr_contig};
+                $done{"$hr_chrom:$hr_start:$hr_end:$hr_contig"} = 1;
             }
         }
     }
@@ -192,7 +198,7 @@ sub parse_vcf_line {
             return;
         }
 
-        if ($info =~ /CONTIGWIDENED=([^:]+):(\d+)\-(\d+)(\_comp){0,1}/) {
+        if ($info =~ /ALTWIDENED=([^:]+):(\d+)\-(\d+)(\_comp){0,1}/) {
             $variant{contig} = $1;
             $variant{contigwidestart} = $2;
             $variant{contigwideend} = $3;
@@ -242,8 +248,8 @@ sub write_multisample_vcf {
 
         if ($chrom_a ne $chrom_b) {
             return $chrom_a <=> $chrom_b if ($chrom_a =~ /^\d+$/) && ($chrom_b =~ /^\d+$/);
-            return $chrom_a if ($chrom_a =~ /^\d+$/);
-            return $chrom_b if ($chrom_b =~ /^\d+$/);
+            return -1 if ($chrom_a =~ /^\d+$/);
+            return 1 if ($chrom_b =~ /^\d+$/);
             return $chrom_a cmp $chrom_b;
         }
         
@@ -261,6 +267,8 @@ sub write_multisample_vcf {
         my $chrom = $rh_variant->{chrom};
         my $widestart = $rh_variant->{widestart};
         my $wideend = $rh_variant->{wideend};
+        my $start = $rh_variant->{start}; # narrow boundaries for HR cov
+        my $end = $rh_variant->{end};
         my $widemean = $rh_variant->{widemean};
         print "Processing $chrom:$widestart-$wideend\n";
         print $mummer_fh "Processing $chrom:$widestart-$wideend\n";
@@ -275,8 +283,7 @@ sub write_multisample_vcf {
             my @match_types = ();
 
             # any HomRef coverage?
-            my @hr_regions = grep {$_->{chrom} eq $chrom && $_->{start} < $widestart && $_->{end} > $wideend} 
-                                 @{$rh_sample_info->{$sample}->{hr_regions}};
+            my @hr_regions = grep {$_->{chrom} eq $chrom && $_->{start} < $start && $_->{end} > $end} @{$rh_sample_info->{$sample}->{hr_regions}};
             my $no_contigs = @hr_regions;
             #print "$sample has $no_contigs HR contigs\n";
             foreach my $rh_region (@hr_regions) {
@@ -297,11 +304,10 @@ sub write_multisample_vcf {
                 print $mummer_fh "~/projects/MUMmer/MUMmer3.23/mummerplot -IdR $rh_variant->{chrom} -IdQ $rh_variant->{contig} -x [$refstart:$refend] -y [$contigstart:$contigend] $qdelta_file\n";
             }
             else {
-                my @exact_matches = grep {$_->{chrom} eq $chrom && $_->{widestart} == $widestart && $_->{wideend} == $wideend &&
-                                            $_->{svtype} eq $svtype && $_->{svlen} == $svlen } @{$rh_sample_info->{$sample}->{svs}};
+                my @exact_matches = grep {$_->{chrom} eq $chrom && $_->{widestart} == $widestart && $_->{wideend} == $wideend && $_->{svtype} eq $svtype && $_->{svlen} == $svlen } @{$rh_sample_info->{$sample}->{svs}};
                 if (@exact_matches) {
                     foreach my $rh_exact_match (@exact_matches) {
-                        #print "EXACT MATCH $chrom:$widestart-$wideend($svtype size $svlen) vs. $rh_exact_match->{chrom}:$rh_exact_match->{widestart}-$rh_exact_match->{wideend}($rh_exact_match->{svtype} size $rh_exact_match->{svlen})\n";
+                        print "EXACT MATCH $chrom:$widestart-$wideend($svtype size $svlen) vs. $rh_exact_match->{chrom}:$rh_exact_match->{widestart}-$rh_exact_match->{wideend}($rh_exact_match->{svtype} size $rh_exact_match->{svlen})\n";
                         push @alleles, '1';
                         push @match_types, 'H';
                         my $refstart = $widestart - 500;
@@ -351,7 +357,10 @@ sub find_best_potential_match {
     my $out1_vcf_fh = Open("ref_var.vcf", "w");
     my $out2_vcf_fh = Open("pot_vars.vcf", "w");
 
+    my $pairno = 1;
     foreach my $rh_potential_match (@{$ra_potential_matches}) {
+        $rh_var->{vcfline} =~ s/^(\S+)\t(\S+)\t(\.)/$1\t$2\tPair$pairno/;
+        $rh_potential_match->{vcfline} =~ s/^(\S+)\t(\S+)\t(\.)/$1\t$2\tPair$pairno/;
         print $out1_vcf_fh $rh_var->{vcfline};
         print $out2_vcf_fh $rh_potential_match->{vcfline};
     }
@@ -364,7 +373,7 @@ sub find_best_potential_match {
     my $results_fh = Open("SVcomp.out");
 
     while (<$results_fh>) {
-        if (/matches/) {
+        if (/MATCH/) {
             print "FOUND MATCH!!!\n$_";
             my $pairno = (/^Pair(\d+)/) ? $1 : undef;
             if (!defined($pairno)) {
