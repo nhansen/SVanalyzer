@@ -79,8 +79,11 @@ while (<$vcf_fh>) {
             if (potential_match($rh_neighborhood_sv, { %current_sv })) {
                 my ($edit_dist, $max_shift, $altlength_diff, $altlength_avg, $size_diff, $size_avg) = calc_distance($rh_neighborhood_sv, { %current_sv }, $fai_obj);
                 my $pos_diff = abs($rh_neighborhood_sv->{pos} - $current_sv{pos});
+                # divide maximum shift by the minimum absolute size of the two variants:
                 my $d1 = abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), abs((2*$size_avg + $size_diff)/2.0)) + 1);
+                # divide the size difference of the two indels by the average absolute size of the difference
                 my $d2 = abs($size_diff)/(abs($size_avg) + 1);
+                # divide edit distance by the minimum alternate haplotype length:
                 my $d3 = abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0, (2*$altlength_avg + $altlength_diff)/2.0) + 1);
                 print "DIST\t$rh_neighborhood_sv->{id}\t$id\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
             }

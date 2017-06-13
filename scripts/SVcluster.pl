@@ -15,7 +15,7 @@ SVcluster.pl - cluster structural variants based on distance metrics printed by 
 
 =head1 SYNOPSIS
 
-  SVcluster.pl --dist <SVmerge distance file>
+  SVcluster.pl --dist <SVmerge distance file> --ids <optional file of ids to allow output of single "clusters">
 
 =head1 DESCRIPTION
 
@@ -35,6 +35,7 @@ process_commandline();
 my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
 
 my $dist_file = $Opt{dist};
+my $id_file = $Opt{ids};
 my $max_posdiff = $Opt{posdiff};
 my $max_relshift = $Opt{relshift};
 my $max_relsizediff = $Opt{relsizediff};
@@ -44,14 +45,27 @@ my $dist_fh = Open($dist_file);
 
 my %node_index = (); # stores the index of each node id
 my @nodes = (); # array of nodes
+
+if ($id_file) { # read in list of node ids and assign indices
+    my $ids_fh = Open($id_file);
+    while (<$ids_fh>) {
+        if (/^(\S+)$/) {
+            push @nodes, $1;
+            $node_index{$1} = $#nodes + 1;
+        }
+        else {
+            die "Invalid line in id file $id_file--lines must contain only one entry with no spaces!\n";
+        }
+    }
+    close $ids_fh;
+}
+
 my @node_edges = (); # array of nodes
 
 while (<$dist_fh>) {
 
     chomp;
-    #my ($dist, $id1, $id2, $avgaltlength, $altlengthdiff, $avgsize, $sizediff, $editdist, $maxshift, $posdiff, $relshift, $relsizediff, $reldist) = split /\t/, $_;
     my ($id1, $id2, $posdiff, $relshift, $relsizediff, $reldist) = split /\t/, $_;
-    #next if ($dist ne 'DIST' || $id1 eq 'ID1');
     next if ($id1 eq 'ID1');
 
     if (!(defined($reldist))) {
@@ -102,7 +116,7 @@ for (my $i=0; $i<=$#nodes; $i++) {
 sub process_commandline {
     # Set defaults here
     %Opt = ( workdir => '.', 'posdiff' => 100000, 'relshift' => 1.0, 'relsizediff' => 1.0, 'reldist' => 1.0 );
-    GetOptions(\%Opt, qw( dist=s workdir=s posdiff=i relshift=f relsizediff=f reldist=f cleanup manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( dist=s workdir=s ids=s posdiff=i relshift=f relsizediff=f reldist=f cleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVcluster.pl, ", q$Revision:$, "\n"; }
