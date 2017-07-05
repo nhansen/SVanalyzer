@@ -46,7 +46,7 @@ my $vcf_fh = Open($vcf_file);
 my ($current_chrom, $current_lastpos); # to check for sorting
 my $total_svs = 0;
 my @current_neighborhood_svs = ();
-print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 while (<$vcf_fh>) {
     next if (/^#/);
 
@@ -77,14 +77,17 @@ while (<$vcf_fh>) {
         for (my $i=0; $i<=$#current_neighborhood_svs; $i++) {
             my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
             if (potential_match($rh_neighborhood_sv, { %current_sv })) {
-                my ($edit_dist, $max_shift, $altlength_diff, $altlength_avg, $size_diff, $size_avg) = calc_distance($rh_neighborhood_sv, { %current_sv }, $fai_obj);
+                my ($edit_dist, $max_shift, $altlength_diff, $altlength_avg, $size_diff, $size_avg, $shared_denominator) = calc_distance($rh_neighborhood_sv, { %current_sv }, $fai_obj);
+
                 my $pos_diff = abs($rh_neighborhood_sv->{pos} - $current_sv{pos});
                 # divide maximum shift by the minimum absolute size of the two variants:
-                my $d1 = abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), abs((2*$size_avg + $size_diff)/2.0)) + 1);
+                my $d1 = ($Opt{olddist}) ? abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), abs((2*$size_avg + $size_diff)/2.0)) + 1) :
+                           abs($max_shift)/$shared_denominator;
                 # divide the size difference of the two indels by the average absolute size of the difference
-                my $d2 = abs($size_diff)/(abs($size_avg) + 1);
+                my $d2 = ($Opt{olddist}) ? abs($size_diff)/(abs($size_avg) + 1) : abs($size_diff)/$shared_denominator;
                 # divide edit distance by the minimum alternate haplotype length:
-                my $d3 = abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0, (2*$altlength_avg + $altlength_diff)/2.0) + 1);
+                my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0, (2*$altlength_avg + $altlength_diff)/2.0) + 1) :
+                           abs($edit_dist)/$shared_denominator;
                 print "DIST\t$rh_neighborhood_sv->{id}\t$id\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
             }
         }
@@ -104,7 +107,7 @@ print "Read $total_svs SVs from file $vcf_file\n";
 sub process_commandline {
     # Set defaults here
     %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50, max_dist => 100000 );
-    GetOptions(\%Opt, qw( ref=s vcf=s check_length check_ref workdir=s max_dist=i cleanup manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s vcf=s check_length check_ref workdir=s max_dist=i olddist nocleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge.pl, ", q$Revision:$, "\n"; }
@@ -195,6 +198,10 @@ sub calc_distance {
 
     my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
 
+    my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
+    my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
+    my $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
+
     # boundaries of constructed haplotype:
 
     my $left_bound = ($pos1 < $pos2) ? $pos1 : $pos2;
@@ -207,18 +214,18 @@ sub calc_distance {
 
     if ($alt_hap1 eq $alt_hap2) { # identical variants
         print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-        return (0, 0, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0);
+        return (0, 0, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
     }
     else {
         # align the alternative haplotypes to each other and evaluate
         my ($maxshift, $editdistance) = compare_haplotypes(\$alt_hap1, \$alt_hap2, $id1, $id2);
         if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
             print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0);
+            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
         }
         else {
             print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0);
+            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
         }
     }
 }
@@ -255,14 +262,14 @@ sub compare_haplotypes {
     my $id2 = shift;
 
     my $tmpfasta1 = "$workingdir/$id1.$id2.fa";
-    write_fasta_file($tmpfasta1, $id1, $r_alt1);
+    write_fasta_file($tmpfasta1, "$id1\_alt", $r_alt1);
     my $tmpfasta2 = "$workingdir/$id2.$id1.fa";
-    write_fasta_file($tmpfasta2, "id2", $r_alt2);
+    write_fasta_file($tmpfasta2, "$id2\_alt", $r_alt2);
 
     my $edlib_aligner = '/home/nhansen/projects/SVanalyzer/edlib/edlib-1.1.2/build/bin/edlib-aligner';
     my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
-    unlink $tmpfasta1;
-    unlink $tmpfasta2;
+    unlink $tmpfasta1 unless ($Opt{nocleanup});
+    unlink $tmpfasta2 unless ($Opt{nocleanup});
     if ($nw_output =~ /Cigar:\n(.*)/m) {
         my $cigar_string = $1;
         my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';
@@ -310,7 +317,7 @@ sub write_fasta_file {
     my $r_sequence = shift;
 
     my $seq_fh = Open("$fasta_file", "w"); 
-    print $seq_fh ">seq_id\n";
+    print $seq_fh ">$seq_id\n";
     my $r_alt_50 = format_50($r_sequence);
     print $seq_fh ${$r_alt_50};
     if (${$r_alt_50} !~ /\n$/) {
