@@ -7,6 +7,7 @@ use Getopt::Long;
 use Pod::Usage;
 use GTB::File qw(Open);
 use Bio::DB::Sam;
+use NHGRI::SVanalyzer::Comp;
 
 our %Opt;
 
@@ -39,6 +40,7 @@ my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
 my $ref_fasta = $Opt{ref};
 my $vcf_file = $Opt{vcf};
 my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
+my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta);
 my $max_distance = $Opt{max_dist};
 
 my $vcf_fh = Open($vcf_file);
@@ -47,6 +49,7 @@ my ($current_chrom, $current_lastpos); # to check for sorting
 my $total_svs = 0;
 my @current_neighborhood_svs = ();
 print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+
 while (<$vcf_fh>) {
     next if (/^#/);
 
@@ -77,7 +80,14 @@ while (<$vcf_fh>) {
         for (my $i=0; $i<=$#current_neighborhood_svs; $i++) {
             my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
             if (potential_match($rh_neighborhood_sv, { %current_sv })) {
-                my ($edit_dist, $max_shift, $altlength_diff, $altlength_avg, $size_diff, $size_avg, $shared_denominator) = calc_distance($rh_neighborhood_sv, { %current_sv }, $fai_obj);
+                my $rh_distance_metrics = $comp_obj->calc_distance(-sv1_info => $rh_neighborhood_sv, -sv2_info => {%current_sv}, -fai_obj => $fai_obj);
+                my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+                my $max_shift = $rh_distance_metrics->{'max_shift'};
+                my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+                my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+                my $size_diff = $rh_distance_metrics->{'size_diff'};
+                my $size_avg = $rh_distance_metrics->{'size_avg'};
+                my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
 
                 my $pos_diff = abs($rh_neighborhood_sv->{pos} - $current_sv{pos});
                 # divide maximum shift by the minimum absolute size of the two variants:
@@ -172,115 +182,6 @@ sub check_sort {
     $$rs_lastpos = $pos;
 }
 
-sub calc_distance {
-    my $rh_sv1 = shift;
-    my $rh_sv2 = shift;
-    my $fai_obj = shift;
-
-    my $ref1 = $rh_sv1->{ref};
-    my $ref2 = $rh_sv2->{ref};
-    my $alt1 = $rh_sv1->{alt};
-    my $alt2 = $rh_sv2->{alt};
-    my $chrom = $rh_sv1->{chrom};
-    my $pos1 = $rh_sv1->{pos};
-    my $pos2 = $rh_sv2->{pos};
-    my $end1 = $rh_sv1->{end};
-    my $end2 = $rh_sv2->{end};
-    my $id1 = $rh_sv1->{id};
-    my $id2 = $rh_sv2->{id};
-    my $reflength1 = $rh_sv1->{reflength};
-    my $reflength2 = $rh_sv2->{reflength};
-    my $altlength1 = $rh_sv1->{altlength};
-    my $altlength2 = $rh_sv2->{altlength};
-
-    my $size1 = $altlength1 - $reflength1;
-    my $size2 = $altlength2 - $reflength2;
-
-    my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
-
-    my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
-    my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
-    my $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
-
-    # boundaries of constructed haplotype:
-
-    my $left_bound = ($pos1 < $pos2) ? $pos1 : $pos2;
-    my $right_bound = ($end1 < $end2) ? $end2 : $end1;
-    my $alt_hap1 = construct_alt_hap($fai_obj, $chrom, $left_bound, $right_bound, $pos1, $end1, \$ref1, \$alt1);
-    my $alt_hap2 = construct_alt_hap($fai_obj, $chrom, $left_bound, $right_bound, $pos2, $end2, \$ref2, \$alt2);
-    my $minhaplength = (length($alt_hap1) < length($alt_hap2)) ? length($alt_hap1) : length($alt_hap2);
-    my $althaplength_avg = (length($alt_hap1) + length($alt_hap2))/2.0;
-    my $althaplength_diff = length($alt_hap1) - length($alt_hap2);
-
-    if ($alt_hap1 eq $alt_hap2) { # identical variants
-        print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-        return (0, 0, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
-    }
-    else {
-        # align the alternative haplotypes to each other and evaluate
-        my ($maxshift, $editdistance) = compare_haplotypes(\$alt_hap1, \$alt_hap2, $id1, $id2);
-        if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
-            print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
-        }
-        else {
-            print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
-        }
-    }
-}
-
-sub construct_alt_hap {
-    my $fai_obj = shift;
-    my $chr = shift;
-    my $left = shift;
-    my $right = shift;
-    my $start = shift;
-    my $end = shift;
-    my $r_ref = shift;
-    my $r_alt = shift;
-
-    #my $alt_allele = uc($gtb_ref->seq("$chr:$left-$right"));
-    #print "Extracting sequence $chr:$left-$right\n";
-    my $alt_allele = uc($fai_obj->fetch("$chr:$left-$right"));
-    my $offset = $start - $left;
-    my $length = $end - $start + 1;
-    my $extracted_ref = substr($alt_allele, $offset, $length); 
-    if (($Opt{check_ref}) && ($extracted_ref ne ${$r_ref})) {
-        die "Extracted reference for $chr:$start-$end does not match provided REF!\n";
-    }
-
-    substr($alt_allele, $offset, $length) = ${$r_alt}; 
-
-    return $alt_allele;
-}
-
-sub compare_haplotypes {
-    my $r_alt1 = shift;
-    my $r_alt2 = shift;
-    my $id1 = shift;
-    my $id2 = shift;
-
-    my $tmpfasta1 = "$workingdir/$id1.$id2.fa";
-    write_fasta_file($tmpfasta1, "$id1\_alt", $r_alt1);
-    my $tmpfasta2 = "$workingdir/$id2.$id1.fa";
-    write_fasta_file($tmpfasta2, "$id2\_alt", $r_alt2);
-
-    my $edlib_aligner = '/home/nhansen/projects/SVanalyzer/edlib/edlib-1.1.2/build/bin/edlib-aligner';
-    my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
-    unlink $tmpfasta1 unless ($Opt{nocleanup});
-    unlink $tmpfasta2 unless ($Opt{nocleanup});
-    if ($nw_output =~ /Cigar:\n(.*)/m) {
-        my $cigar_string = $1;
-        my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';
-        my $maxshift = calc_max_shift($cigar_string);
-        return ($maxshift, $score);
-    }
-    else {
-        return ('NA', 'NA');
-    }
-}
-
 sub potential_match {
     my $rh_sv1 = shift;
     my $rh_sv2 = shift;
@@ -309,71 +210,6 @@ sub potential_match {
     }
 
     return 1;
-}
-
-sub write_fasta_file {
-    my $fasta_file = shift;
-    my $seq_id = shift;
-    my $r_sequence = shift;
-
-    my $seq_fh = Open("$fasta_file", "w"); 
-    print $seq_fh ">$seq_id\n";
-    my $r_alt_50 = format_50($r_sequence);
-    print $seq_fh ${$r_alt_50};
-    if (${$r_alt_50} !~ /\n$/) {
-        print $seq_fh "\n";
-    }
-    close $seq_fh;
-}
-
-# format a sequence string for writing to FASTA file
-sub format_50 {
-    my $r_seq = shift;
-
-    my $bases = 0;
-    my $revseq = reverse(${$r_seq});
-    my $formattedseq = '';
-    while (my $nextbase = chop $revseq) {
-        $formattedseq .= $nextbase;
-        $bases++;
-        if ($bases == 50) {
-            $formattedseq .= "\n";
-            $bases = 0;
-        }
-    }
-    if ($bases) { # need an extra enter
-        $formattedseq .= "\n";
-    }
-
-    return \$formattedseq;
-}
-
-sub calc_max_shift {
-    my $cigar = shift;
-
-    my ($max_shift, $current_shift) = (0, 0);
-    #print "Cigar: $cigar\n";
-    while ($cigar) {
-        my ($bases, $op);
-        if ($cigar =~ s/^(\d+)([MDI])//) {
-            ($bases, $op) = ($1, $2);
-            if ($op eq 'D') { # deleted from reference, decrease shift
-                $current_shift -= $bases;
-            }
-            elsif ($op eq 'I') { # deleted from reference--advance ref coord
-                $current_shift += $bases;
-            }
-            if (abs($current_shift) > abs($max_shift)) {
-                $max_shift = $current_shift;
-            }
-        }
-        else {
-            die "Cigar string $cigar is of the wrong form!\n";
-        }
-    }
-    #print "Max shift: $max_shift\n";
-
-    return $max_shift;
 }
 
 __END__
