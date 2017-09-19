@@ -8,9 +8,8 @@ use Pod::Usage;
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
-
-use lib qw( /home/nhansen/projects/gtb/perl/lib );
 use NHGRI::MUMmer::AlignSet;
+
 our %Opt;
 
 =head1 NAME

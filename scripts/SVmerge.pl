@@ -40,7 +40,6 @@ my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
 my $ref_fasta = $Opt{ref};
 my $vcf_file = $Opt{vcf};
 my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
-my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta);
 my $max_distance = $Opt{max_dist};
 
 my $vcf_fh = Open($vcf_file);
@@ -79,8 +78,12 @@ while (<$vcf_fh>) {
         # if chance of match, compare alternate alleles with edlib:
         for (my $i=0; $i<=$#current_neighborhood_svs; $i++) {
             my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
-            if (potential_match($rh_neighborhood_sv, { %current_sv })) {
-                my $rh_distance_metrics = $comp_obj->calc_distance(-sv1_info => $rh_neighborhood_sv, -sv2_info => {%current_sv}, -fai_obj => $fai_obj);
+            my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
+                                                        -sv1_info => $rh_neighborhood_sv,
+                                                        -sv2_info => {%current_sv},
+                                                        -workdir => $workingdir);
+            if ($comp_obj->potential_match()) {
+                my $rh_distance_metrics = $comp_obj->calc_distance();
                 my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                 my $max_shift = $rh_distance_metrics->{'max_shift'};
                 my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
@@ -180,36 +183,6 @@ sub check_sort {
 
     $$rs_lastchrom = $chrom;
     $$rs_lastpos = $pos;
-}
-
-sub potential_match {
-    my $rh_sv1 = shift;
-    my $rh_sv2 = shift;
-
-    # First score is the max shift of the alignment divided by the min absolute value SV size
-    # Max shift is greater than the difference in alternate alleles, which is the difference in SV sizes
-
-    my $altlength1 = $rh_sv1->{altlength};
-    my $altlength2 = $rh_sv2->{altlength};
-    my $minshift = abs($altlength1 - $altlength2);
-
-    my $size1 = $rh_sv1->{size};
-    my $size2 = $rh_sv2->{size};
-
-    my $minsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
-
-    if ($minshift >= $minsize) {
-        return 0;
-    }
-    
-    my $pos1 = $rh_sv1->{pos};
-    my $pos2 = $rh_sv2->{pos};
-
-    if (abs($pos2 - $pos1) > 6.0*$minsize) {
-        return 0;
-    }
-
-    return 1;
 }
 
 __END__

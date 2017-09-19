@@ -8,12 +8,13 @@ use Pod::Usage;
 use GTB::File qw(Open);
 use Bio::DB::Sam;
 use NHGRI::MUMmer::AlignSet;
+use NHGRI::SVanalyzer::Comp;
 
 our %Opt;
 
 =head1 NAME
 
-SVcomp.pl - compare structural variants in VCF format by constructing alternate haplotypes and comparing them.
+SVcomp.pl - calculate "distances" between structural variants in VCF format by constructing their alternate haplotypes and comparing them.
 
 =head1 SYNOPSIS
 
@@ -40,7 +41,7 @@ my $vcf_file2 = $ARGV[1];
 
 my $workingdir = $Opt{workdir};
 my $ref_fasta = $Opt{ref};
-my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
+#my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
 
 my $vcf1_fh = Open($vcf_file1);
 my $vcf2_fh = Open($vcf_file2);
@@ -72,16 +73,15 @@ while (<$vcf1_fh>) {
 
     my $size1 = $reflength1 - $altlength1;
     my $size2 = $reflength2 - $altlength2;
+ 
+    my $rh_sv1 = { chrom => $chr1, pos => $pos1, end => $end1, id => $id1, ref => $ref1, alt => $alt1};
+    my $rh_sv2 = { chrom => $chr2, pos => $pos2, end => $end2, id => $id2, ref => $ref2, alt => $alt2};
 
+    my $comp_obj = NHGRI::SVanalyzer::Comp->new(-sv1_info => $rh_sv1, -sv2_info => $rh_sv2, -ref_fasta => $ref_fasta);
     my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
 
-    if (potential_aligning_lengths($size1, $size2)) { # essentially, one SV's size is not more than twice the size of the other
-        # boundaries of constructed haplotype:
-    
-        my $left_bound = ($pos1 < $pos2) ? $pos1 : $pos2;
-        my $right_bound = ($end1 < $end2) ? $end2 : $end1;
-        my $alt_hap1 = construct_alt_hap($fai_obj, $chr1, $left_bound, $right_bound, $pos1, $end1, \$ref1, \$alt1);
-        my $alt_hap2 = construct_alt_hap($fai_obj, $chr2, $left_bound, $right_bound, $pos2, $end2, \$ref2, \$alt2);
+    if ($comp_obj->potential_match()) {
+        my $rh_distance_metrics = $comp_obj->calc_distance(); 
         my $minhaplength = (length($alt_hap1) < length($alt_hap2)) ? length($alt_hap1) : length($alt_hap2);
     
         if ($alt_hap1 eq $alt_hap2) { # identical variants

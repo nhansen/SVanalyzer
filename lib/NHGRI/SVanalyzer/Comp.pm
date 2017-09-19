@@ -48,7 +48,13 @@ our $VERSION  = '0.01';
 
   Input:  -ref_fasta - path to a valid FASTA-formatted file
           containing the reference sequences that were used
-          in calling structural variants.
+          in calling structural variants
+          -sv1_info - reference to a hash containing the
+          first SV call (required)
+          -sv2_info - reference to a hash containing the 
+          second SV call (required)
+          -workdir - path of a directory to use for writing 
+          temporary files (optional)
 
   Output: New Comp object
 
@@ -59,16 +65,77 @@ sub new {
     my $class = shift;
     my %params = @_;
     my $ref_fasta = $params{-ref_fasta};
+    my $rh_sv1 = $params{-sv1_info};
+    my $rh_sv2 = $params{-sv2_info};
+    my $workdir = $params{-workdir};
 
     my $self = { ref_fasta => $ref_fasta,
+                 sv1_info => $rh_sv1,
+                 sv2_info => $rh_sv2,
+                 workdir => $workdir,
                   };
+
+    if ((!$rh_sv1) || (!$rh_sv2)) {
+        die "Two references to hashes of SV info must be passed as -sv1_info and -sv2_info to the NHGRI::SVanalyzer::Comp constructor!\n";
+    }
 
     bless $self, $class;
 
-    $self->{fai_obj} = Bio::DB::Sam::Fai->load($ref_fasta);
+    if ($ref_fasta) {
+        $self->{fai_obj} = Bio::DB::Sam::Fai->load($ref_fasta);
+    }
+
+    $self->_calculate_dependent_variables();
 
     return $self;
 }
+
+###########################################################
+
+=item B<potential_match()>
+
+  This method 
+  
+  Input:  None.
+  Output: 1 if there is a potential match between the 
+          two SV's, 0 otherwise.
+
+=cut
+
+###########################################################
+sub potential_match {
+    my $self  = shift;
+    my %params = @_;
+
+    my $rh_sv1 = $self->{sv1_info};
+    my $rh_sv2 = $self->{sv2_info};
+
+    # First score is the max shift of the alignment divided by the min absolute value SV size
+    # Max shift is greater than the difference in alternate alleles, which is the difference in SV sizes
+
+    my $altlength1 = $rh_sv1->{altlength};
+    my $altlength2 = $rh_sv2->{altlength};
+    my $minshift = abs($altlength1 - $altlength2);
+
+    my $size1 = $rh_sv1->{size};
+    my $size2 = $rh_sv2->{size};
+
+    my $minsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
+
+    if ($minshift >= $minsize) {
+        return 0;
+    }
+    
+    my $pos1 = $rh_sv1->{pos};
+    my $pos2 = $rh_sv2->{pos};
+
+    if (abs($pos2 - $pos1) > 6.0*$minsize) {
+        return 0;
+    }
+
+    return 1;
+
+} ## end potential_match
 
 ###########################################################
 
@@ -79,16 +146,8 @@ sub new {
   and returns a hash of different distance metrics 
   measuring how different the two variants are.
 
-  The following parameters should be passed to the method:
-  
-  Input:  -sv1_info - reference to a hash containing the
-          first SV call
-          -sv2_info - reference to a hash containing the 
-          second SV call
-          -fai_obj - Bio::DB::Sam::Fai object for the 
-          reference sequences
-
-  Output: reference to a hash containing distance metrics.
+  Input:  None.
+  Output: Reference to a hash containing distance metrics.
 
 =cut
 
@@ -97,9 +156,9 @@ sub calc_distance {
     my $self  = shift;
     my %params = @_;
 
-    my $rh_sv1 = $params{-sv1_info};
-    my $rh_sv2 = $params{-sv2_info};
-    my $fai_obj = $params{-fai_obj};
+    my $rh_sv1 = $self->{sv1_info};
+    my $rh_sv2 = $self->{sv2_info};
+    my $fai_obj = $self->{fai_obj};
 
     my $ref1 = $rh_sv1->{ref};
     my $ref2 = $rh_sv2->{ref};
@@ -137,8 +196,7 @@ sub calc_distance {
     my $althaplength_diff = length(${$rs_alt_hap1}) - length(${$rs_alt_hap2});
 
     if (${$rs_alt_hap1} eq ${$rs_alt_hap2}) { # identical variants
-        print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-        #return (0, 0, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
+        print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n" if ($self->{verbose});
         return {'edit_distance' => 0,
                 'max_shift' => 0,
                 'altlength_diff' => $althaplength_diff,
@@ -151,8 +209,7 @@ sub calc_distance {
         # align the alternative haplotypes to each other and evaluate
         my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2);
         if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
-            print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            #return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
+            print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
                     'altlength_diff' => $althaplength_diff,
@@ -162,8 +219,7 @@ sub calc_distance {
                     'shared_denominator' => $shared_denominator};
         }
         else {
-            print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            #return ($editdistance, $maxshift, $althaplength_diff, $althaplength_avg, $size2 - $size1, ($size1 + $size2)/2.0, $shared_denominator);
+            print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
                     'altlength_diff' => $althaplength_diff,
@@ -266,6 +322,33 @@ sub compare_alt_haplotypes {
     }
 
 } ## end compare_alt_haplotypes
+
+###########################################################
+
+=item B<_calculate_dependent_variables()>
+
+  This method calculates the values of reflength, altlength,
+  and size for each SV of the Comp object.
+
+  Input: Comp object
+  Output: 1 if successful
+
+=cut
+
+###########################################################
+sub calculate_dependent_variables {
+    my $self  = shift;
+   
+    $self->{sv1_info}->{reflength} = length($self->{sv1_info}->{ref}); 
+    $self->{sv2_info}->{reflength} = length($self->{sv2_info}->{ref}); 
+    $self->{sv1_info}->{altlength} = length($self->{sv1_info}->{alt}); 
+    $self->{sv2_info}->{altlength} = length($self->{sv2_info}->{alt}); 
+    $self->{sv1_info}->{size} = $self->{sv1_info}->{reflength} - $self->{sv1_info}->{altlength};
+    $self->{sv2_info}->{size} = $self->{sv2_info}->{reflength} - $self->{sv2_info}->{altlength};
+
+    return 1;
+
+} ## end _calculate_dependent_variables
 
 ###########################################################
 
