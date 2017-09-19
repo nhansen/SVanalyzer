@@ -1,0 +1,39 @@
+SVanalyzer package
+
+INSTALLATION:
+
+In addition to the software included in this package, the user must have a working copy of 
+samtools installed and in ones path (version 0.1.16 or greater), as well as R (version 1.6.1
+or greater) with the "statmod" library (available at 
+http://cran.r-project.org/web/packages/statmod/index.html).
+
+To install Shimmer system-wide (root permissions required):
+
+    perl Build.PL
+    ./Build
+    ./Build test
+    ./Build install
+
+For local user installation:
+
+    perl Build.PL --install_base $HOME
+    ./Build
+    ./Build test
+    ./Build install
+
+    Then, to access the installed scripts, $HOME/bin must be in your path:
+
+        export PATH=$HOME/bin:$PATH
+    
+    And $HOME/lib/perl5 must be in your PERL5LIB path:
+
+        export PERL5LIB=$HOME/lib/perl5:$PERL5LIB
+
+    The above export commands can be added to your .profile or .bash_profile
+    in order to make them available each time you log in.
+
+USAGE:
+
+Run perldoc shimmer.pl for complete documentation.
+
+
