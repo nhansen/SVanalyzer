@@ -24,9 +24,5 @@ docs/make.bat
 docs/Makefile
 LICENSE
 INSTALL
-Makefile
-printCompCounts/Makefile
-printCompCounts/main.c
-printCompCounts/params.c
-printCompCounts/printcomp.h
 META.yml
+META.json

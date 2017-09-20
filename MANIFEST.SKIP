@@ -1,4 +1,6 @@
-^MYMETA.yml$
+META.yml
+MYMETA.json
+MYMETA.yml
 t/testout
 _build
 ^Build$
