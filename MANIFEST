@@ -17,6 +17,10 @@ lib/NHGRI/SVanalyzer/Comp.pm
 lib/NISC/Sequencing/Date.pm
 t/1_load.t
 t/2_call.t
+t/test.qdelta
+t/hs37d5_18start.fa
+t/utg7180000005069.fa
+t/regions.bed
 README.textile
 docs/conf.py
 docs/index.rst
