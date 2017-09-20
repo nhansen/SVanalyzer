@@ -54,6 +54,9 @@ our $VERSION  = '0.01';
           for each query entry
           -extend_exact - option to extend alignments as far as is
           possible with exactly matching sequence
+          -reference_file - option to set alternate reference file
+          (rather than use reference_file present in delta file)
+          -query_file - option to set alternate query file
   Output: New AlignSet object
 
 =cut
@@ -67,12 +70,16 @@ sub new {
     my $storerefentrypairs = $params{-storerefentrypairs};
     my $storequeryentrypairs = $params{-storequeryentrypairs};
     my $extend_exact = $params{-extend_exact};
+    my $reference_file = $params{-reference_file};
+    my $query_file = $params{-query_file};
 
     my $self = { delta_file => $delta_file,
                  ignore_unequal => $ignore_unequal,
                  storerefentrypairs => $storerefentrypairs,
                  storequeryentrypairs => $storequeryentrypairs,
                  extend_exact => $extend_exact,
+                 reference_file => $reference_file,
+                 query_file => $query_file,
                   };
 
     bless $self, $class;
@@ -96,6 +103,7 @@ sub new {
   populated:
 
   reference_file, query_file - files aligned in this delta file
+      (only used if not specified in constructor)
   entry_pairs - reference to an array of hash references, each
       of which contains the matches between an entry from the 
       reference file and an entry from the query file.  The fields
@@ -124,8 +132,8 @@ sub _parse_delta_file {
     my ($ref_entry, $query_entry);
     while (<$fh>) {
         if (/^(\S+)\s(\S+)$/) { # first line contains files from run
-            $self->{reference_file} = $1;
-            $self->{query_file} = $2;
+            $self->{reference_file} = $self->{reference_file} || $1;
+            $self->{query_file} = $self->{query_file} || $2;
             if ($self->{extend_exact}) {
                 $self->{ref_fasta_db} = GTB::FASTA->new($self->{reference_file});
                 $self->{query_fasta_db} = GTB::FASTA->new($self->{query_file});
