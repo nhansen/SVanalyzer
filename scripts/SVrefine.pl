@@ -53,7 +53,9 @@ my $delta_obj = NHGRI::MUMmer::AlignSet->new(
                   -delta_file => $delta_file,
                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
                   -storequeryentrypairs => 1,
-                  -extend_exact => 1);
+                  -extend_exact => 1,
+                  -reference_file => $ref_fasta,
+                  -query_file => $query_fasta);
 
 # set up assembly FASTA objects:
 $ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);
