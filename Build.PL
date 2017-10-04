@@ -2,11 +2,7 @@
 # To create build script, run, "perl Build.PL"
 use Module::Build;
 
-my $class = Module::Build->subclass(
-	class => 'My::Build',
-		);
-
-my $build = $class->new(
+my $build = Module::Build->new(
         module_name   => 'SVanalyzer',
         dist_version  => 0.10,
         dist_author   => 'NHGRI Perl Programmers',

@@ -707,7 +707,8 @@ sub write_simple_variant {
             }
         }
         if ($pos > $end) {
-            die "Deletion position $pos is greater than endpoint $end for $chrom:$pos, svlen $svsize, breaksimlength $repbases\n";
+            print STDERR "Deletion position $pos is greater than endpoint $end for $chrom:$pos, svlen $svsize, breaksimlength $repbases\n";
+            next;
         }
         if ($Opt{includeseqs}) {
             if ($pos >= 1 && $end <= $chrlength) {
