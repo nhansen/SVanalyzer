@@ -1,0 +1,33 @@
+---
+abstract: 'Package for analyzing structural variation in sequence data'
+author:
+  - 'NHGRI Perl Programmers'
+build_requires: {}
+configure_requires:
+  Module::Build: '0.42'
+dynamic_config: 1
+generated_by: 'Module::Build version 0.4214, CPAN::Meta::Converter version 2.150005'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: SVanalyzer
+provides:
+  GTB::FASTA:
+    file: lib/GTB/FASTA.pm
+    version: '0.05'
+  GTB::File:
+    file: lib/GTB/File.pm
+    version: '0.23'
+  NHGRI::MUMmer::AlignSet:
+    file: lib/NHGRI/MUMmer/AlignSet.pm
+    version: '0.01'
+  NHGRI::SVanalyzer::Comp:
+    file: lib/NHGRI/SVanalyzer/Comp.pm
+    version: '0.01'
+  NISC::Sequencing::Date:
+    file: lib/NISC/Sequencing/Date.pm
+resources:
+  license: http://dev.perl.org/licenses/
+version: '0.1'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.016'
