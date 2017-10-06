@@ -3,7 +3,6 @@ package GTB::File;
 
 use strict;
 use Carp qw(croak);
-use GTB::Unix qw(which);
 use Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(Open first_is_older wait_for_file);
@@ -31,11 +30,15 @@ sub import {
 sub use_bgzip {
     my ($bgzip) = @_;
     if (!$bgzip) {
-        $bgzip = which("bgzip");
+        $bgzip = `which bgzip`;
+        chomp $bgzip;
       
     }
     if ($bgzip) {
         $GzipOut = $bgzip;
+    }
+    else {
+        die "No block unzip utility found\n";
     }
 }
 
