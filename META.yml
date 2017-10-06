@@ -3,8 +3,6 @@ abstract: 'Package for analyzing structural variation in sequence data'
 author:
   - 'NHGRI Perl Programmers'
 build_requires: {}
-configure_requires:
-  Module::Build: '0.42'
 dynamic_config: 1
 generated_by: 'Module::Build version 0.4214, CPAN::Meta::Converter version 2.150005'
 license: perl
