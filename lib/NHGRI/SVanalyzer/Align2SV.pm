@@ -235,12 +235,6 @@ sub _calculate_type {
     my $repeat_bases = ($type eq 'SIMPLEINS' || $type eq 'DUP') ? -1*$refjump : 
                         (($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') ? -1*$queryjump : 0);
 
-    #if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
-        #$type = 'ARTIFACT';
-    #}
-
-    print STDERR "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
-
     $self->{type} = $type;
     $self->{ref1} = $ref1;
     $self->{ref2} = $ref2;
