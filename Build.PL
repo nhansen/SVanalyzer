@@ -9,6 +9,7 @@ my $build = Module::Build->new(
         dist_abstract => 'Package for analyzing structural variation in sequence data',
         license       => 'perl',
         scripts       => [qw(scripts/SVrefine.pl scripts/SVcomp.pl scripts/SVwiden.pl)],
+        configure_requires      => { 'Module::Build' => '0.36' },
         requires      => { },
         );
 if (!`which samtools`) {
