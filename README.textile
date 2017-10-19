@@ -10,7 +10,15 @@ National Institutes of Health.  Nancy can be reached at nhansen@mail.nih.gov.
 
 h2. Build Dependencies
 
-* None right now
+* samtools v.0.1.17 or better (https://sourceforge.net/projects/samtools/files/)
+
+For SVcomp command:
+
+* edlib v.1.1.2 or better (https://github.com/Martinsos/edlib/releases)
+
+For SVwiden command:
+
+* MUMmer 3 (http://mummer.sourceforge.net/)
 
 h2. Build Instructions
 
