@@ -12,11 +12,16 @@ h2. Build Dependencies
 
 * samtools v.0.1.17 or better (https://sourceforge.net/projects/samtools/files/)
 
-For SVcomp command:
+Alignment tools are necessary to use the SVcomp and SVwiden commands. While
+the package will build and skip tests for these two commands if the aligners
+are not installed and in the user's path, SVanalyzer will be more functional if 
+these aligners are installed:
+
+For the SVcomp command:
 
 * edlib v.1.1.2 or better (https://github.com/Martinsos/edlib/releases)
 
-For SVwiden command:
+For the SVwiden command:
 
 * MUMmer 3 (http://mummer.sourceforge.net/)
 
