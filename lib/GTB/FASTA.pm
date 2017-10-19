@@ -41,7 +41,8 @@ sub new {
     if (!$param) {
         croak "new: assembly name or .mfa file expected";
     }
-    my $self = bless { _cached_chr => $EMPTY }, ref $pkg || $pkg;
+    my $self = bless { _cached_chr => $EMPTY,
+                        }, ref $pkg || $pkg;
     my $mfa = $self->find_reference_fasta($param, $dir);
     return $self;
 }
@@ -113,7 +114,9 @@ sub _get_index {
     my ($self) = @_;
     if (!$self->{_index}) {
         my $fai = "$self->{_mfa}.fai";
-        if (!-f $fai) {
+        my $mfa_age = -M $self->{_mfa};
+        my $fai_age = -M $fai;
+        if ((!-f $fai) || ($fai_age > $mfa_age)) {
             if (!$self->reindex()) {
                 die "Failed trying to create FASTA index $fai, $!\n";
             }
