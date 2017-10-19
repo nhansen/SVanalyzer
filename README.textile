@@ -21,12 +21,12 @@ bc. git clone git://github.com/nhansen/SVanalyzer.git
 h3. Build SVanalyzer
 
 bc.. cd SVanalyzer
-perl Makefile.PL
-make
-make test
-make install
+perl Build.PL
+Build
+Build test
+Build install
 
-p. * For local installation, call perl Makefile.PL with "--install_base $HOME"
+p. * For local installation, call perl Build.PL with "--install_base $HOME"
 
 h2. Documentation
 
