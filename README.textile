@@ -41,7 +41,7 @@ perl Build.PL
 
 h3. Local installation
 
-p. For local installation, call perl Build.PL with "--install_base $HOME"
+p. For local installation, call "perl Build.PL" with "--install_base $HOME"
 
 h2. Documentation
 
