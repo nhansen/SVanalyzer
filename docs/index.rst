@@ -25,9 +25,19 @@ git clone git://github.com/nhansen/SVanalyzer.git
 
 After unzipping the tarball or cloning the directory, build SVanalyzer::
 
-cd SVanalyzer
-perl Makefile.PL
-make
-make test
-make install
+   | cd SVanalyzer
+   | perl Build.PL
+   | ./Build
+   | ./Build test
+   | ./Build install
+
+
+Tools
+=======
+
+*  :ref:`SVrefine       <svrefine>` - Call sequence-resolved structural variants (SVs) from assembly consensus
+*  :ref:`SVcomp         <svcomp>` - Compare sequence-resolved SVs to each other
+*  :ref:`SVmerge        <svmerge>` - Merge similar sequence-resolved SVs in VCF format
+*  :ref:`SVwiden        <svwiden>` - Add tags to a VCF file of sequence-resolved SVs detailing surrounding repetitive genomic context
+
 
