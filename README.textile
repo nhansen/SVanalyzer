@@ -22,9 +22,9 @@ h3. Build SVanalyzer
 
 bc.. cd SVanalyzer
 perl Build.PL
-Build
-Build test
-Build install
+./Build
+./Build test
+./Build install
 
 p. * For local installation, call perl Build.PL with "--install_base $HOME"
 
