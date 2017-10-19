@@ -9,6 +9,7 @@ use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
 use NHGRI::MUMmer::AlignSet;
+use NHGRI::SVanalyzer::Align2SV;
 
 our %Opt;
 
@@ -67,6 +68,7 @@ my $query_db = GTB::FASTA->new($query_fasta);
 my @ref_entries = $ref_db->ids(); # ordered as in fasta index
 my $rh_regions = read_regions_file($regions_file);
 
+# cycle through regions and call variants:
 foreach my $chrom (@ref_entries) {
     my $ra_regions = $rh_regions->{$chrom};
     if ($ra_regions) {
@@ -234,10 +236,6 @@ sub process_region {
             # pull contiguous set of contig alignments in region aligned to reference region:
             my @region_aligns = pull_region_contig_aligns(\@sorted_contigaligns, $chrom, $refleftend, $refrightstart);
 
-            #my %contigrefentries = map { $_->{ref_entry} => 1 } @region_aligns;
-            #my $refstring = join ':', keys %contigrefentries;
-            #print STDERR "CONTIG $contig matches to ref entries $refstring\n" if ($Opt{verbose});
-
             # is there only one alignment to $chrom and does it span the region of interest?  If so, store reference coverage for this contig:
             my @ref_aligns = grep {$_->{ref_entry} eq $chrom} @region_aligns;
 
@@ -273,48 +271,41 @@ sub process_region {
                 if (@region_aligns == 2 && $region_aligns[0]->{comp} == $region_aligns[1]->{comp}) {
                     # order them, if possible, checking for consistency:
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1]);
-                    print STDERR "ONE SIMPLE BREAK\n" if (@simple_breaks==1);
+                    print STDERR "ONE SIMPLE BREAK\n" if (@simple_breaks==1) && ($Opt{verbose});
                 }
                 elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
                     ($region_aligns[1]->{comp} == $region_aligns[2]->{comp})) {
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print STDERR "TWO SIMPLE BREAKS\n" if (@simple_breaks==2);
+                    print STDERR "TWO SIMPLE BREAKS\n" if (@simple_breaks==2) && ($Opt{verbose});
                 }
                 elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
                        ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
                     @inversion_aligns = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print STDERR "INVERSION!\n";
+                    print STDERR "INVERSION!\n" if ($Opt{verbose});
                 }
 
                 foreach my $ra_simple_break (@simple_breaks) {
                     my $left_align = $ra_simple_break->[0];
                     my $right_align = $ra_simple_break->[1];
+
+                    my $align2sv_obj = NHGRI::SVanalyzer::Align2SV->new( -delta_obj => $delta_obj,
+                                                                         -left_align => $left_align,
+                                                                         -right_align => $right_align );
     
-                    my $ref1 = $left_align->{ref_end};
-                    my $ref2 = $right_align->{ref_start};
-                    my $refjump = $ref2 - $ref1 - 1;
+                    my $ref1 = $align2sv_obj->{ref1};
+                    my $ref2 = $align2sv_obj->{ref2};
                
-                    my $query1 = $left_align->{query_end}; 
-                    my $query2 = $right_align->{query_start}; 
-                    my $queryjump = ($comp) ? $query1 - $query2 - 1 : $query2 - $query1 - 1; # from show-diff code--number of unaligned bases
+                    my $query1 = $align2sv_obj->{query1};
+                    my $query2 = $align2sv_obj->{query2};
 
-                    my $svsize = $refjump - $queryjump; # negative for insertions/positive for deletions
-                 
-                    my $type = ($refjump < 0 && $queryjump < 0) ? (($svsize < 0) ? 'DUP' : 'CONTRAC') :
-                               (($svsize < 0 ) ? 'SIMPLEINS' : 'SIMPLEDEL'); # we reverse this later on so that deletions have negative SVLEN
+                    my $svsize = $align2sv_obj->{svsize};
+                    my $type = $align2sv_obj->{type};
 
-                    if (($svsize < 0) && ($refjump > 0)) {
-                        $type = 'SUBSINS';
-                    }
-                    elsif (($svsize > 0) && ($queryjump > 0)) {
-                        $type = 'SUBSDEL';
-                    }
-                    elsif ($svsize == 0) { # is this even possible?--yes, but these look like alignment artifacts
+                    if ($svsize == 0) { # is this even possible?--yes, but these look like alignment artifacts
                         next;
                     }
                     $svsize = abs($svsize);
-                    my $repeat_bases = ($type eq 'SIMPLEINS' || $type eq 'DUP') ? -1*$refjump : 
-                                        (($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') ? -1*$queryjump : 0);
+                    my $repeat_bases = $align2sv_obj->{repeat_bases};
   
                     if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
                         next;
@@ -325,45 +316,29 @@ sub process_region {
                         next;
                     }
 
-                    print STDERR "TYPE $type size $svsize (REFJUMP $refjump QUERYJUMP $queryjump)\n"; 
     
                     if ($type eq 'SIMPLEINS' || $type eq 'DUP') {
-                        process_insertion($delta_obj, $left_align, $right_align, $chrom, $contig,
-                              $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
-                              $refjump, $queryjump, $repeat_bases, $ra_vcf_lines);
+                        $align2sv_obj->widen_insertion();
+                        write_simple_variant($ra_vcf_lines, $align2sv_obj);
                     }
                     elsif ($type eq 'SIMPLEDEL' || $type eq 'CONTRAC') {
-                        process_deletion($delta_obj, $left_align, $right_align, $chrom, $contig,
-                              $ref1, $query1, $ref2, $query2, $comp, $type, $svsize, 
-                              $refjump, $queryjump, $repeat_bases, $ra_vcf_lines);
+                        $align2sv_obj->widen_deletion();
+                        write_simple_variant($ra_vcf_lines, $align2sv_obj);
                     }
                     else {
                         my $altpos = ($comp) ? $query1 - 1 : $query1 + 1;
                         my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
-                        my $rh_var = {'type' => $type,
-                                      'svsize' => $svsize,
-                                      'repbases' => 0,
-                                      'chrom' => $chrom,
-                                      'pos' => $ref1 + 1,
-                                      'end' => $ref2 - 1,
-                                      'contig' => $contig,
-                                      'altpos' => $altpos,
-                                      'altend' => $altend,
-                                      'ref1' => $ref1,
-                                      'ref2' => $ref2,
-                                      'refjump' => $refjump,
-                                      'query1' => $query1,
-                                      'query2' => $query2,
-                                      'queryjump' => $queryjump,
-                                      'comp' => $comp,
-                                     };
-                        write_simple_variant($ra_vcf_lines, $rh_var);
+                        write_simple_variant($ra_vcf_lines, $align2sv_obj);
                     }
                 }
 
                 # is it an inversion?
                 if (@inversion_aligns) {
-                    # OOPS! Not implemented yet
+                    my $left_align = $inversion_aligns[0];
+                    my $middle_align = $inversion_aligns[1];
+                    my $right_align = $inversion_aligns[2];
+        
+                    process_inversion($delta_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
                 }
             }
         }
@@ -487,172 +462,56 @@ sub find_breaks {
     return @valid_breaks;
 }
 
-sub process_insertion {
+sub process_inversion {
     my $delta_obj = shift;
     my $left_align = shift;
+    my $middle_align = shift;
     my $right_align = shift;
-    my $chrom = shift;
-    my $contig = shift;
-    my $ref1 = shift;
-    my $query1 = shift;
-    my $ref2 = shift;
-    my $query2 = shift;
-    my $comp = shift;
-    my $type = shift;
-    my $svsize = shift;
-    my $refjump = shift;
-    my $queryjump = shift;
-    my $repeat_bases = shift;
-    my $ra_vcf_lines = shift;
 
-    print STDERR "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chrom ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
-    print STDERR "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
+    my $ref1 = $left_align->{ref_end};
+    my $ref2 = $middle_align->{ref_start};
+    my $ref3 = $middle_align->{ref_end};
+    my $ref4 = $right_align->{ref_start};
 
-    $delta_obj->find_query_coords_from_ref_coord($ref1, $chrom);
-    $delta_obj->find_query_coords_from_ref_coord($ref2, $chrom);
+    my $query1 = $left_align->{query_end};
+    my $query2 = $middle_align->{query_start};
+    my $query3 = $middle_align->{query_end};
+    my $query4 = $right_align->{query_start};
 
-    if (!$left_align->{query_matches}->{$ref1} || $query1 != $left_align->{query_matches}->{$ref1}) {
-        die "QUERY1 $query1 doesn\'t match $left_align->{query_matches}->{$ref1}\n"; 
-    }
-    
-    if (!$right_align->{query_matches}->{$ref2} || $query2 != $right_align->{query_matches}->{$ref2}) {
-        die "QUERY2 $query2 doesn\'t match $right_align->{query_matches}->{$ref2}\n"; 
-    }
-    
-    my $query1p = $right_align->{query_matches}->{$ref1};
-    my $query2p = $left_align->{query_matches}->{$ref2};
+    my $firstcomp = $left_align->{comp};
+    my $secondcomp = $middle_align->{comp};
+    my $thirdcomp = $right_align->{comp};
 
-    print STDERR "query1p $query1p corresponds to ref $ref1 in second align, query2p $query2p corresponds to ref2 $ref2 in first align\n" if ($Opt{verbose});
+    print STDERR "INVERSION refs $ref1 $ref2 $ref3 $ref4 queries $query1 $query2 $query3 $query4 comp $firstcomp/$secondcomp/$thirdcomp\n";
 
-    if (!defined($query1p)) {
-        print STDERR "NONREPETITIVE INSERTION--need to check\n";
-        $query1p = $query2 - 1;
-    }
-    if (!defined($query2p)) {
-        print STDERR "NONREPETITIVE INSERTION--need to check\n";
-        $query2p = $query1 - 1;
-    }
-
-    my $altpos = ($comp) ? $query2p + 1 : $query2p - 1;
-    my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
-    my $rh_var = {'type' => $type,
-                  'svsize' => -1.0*$svsize,
-                  'repbases' => $repeat_bases,
-                  'chrom' => $chrom,
-                  'pos' => $ref2 - 1,
-                  'end' => $ref2 - 1,
-                  'contig' => $contig,
-                  'altpos' => $altpos,
-                  'altend' => $altend,
-                  'ref1' => $ref1,
-                  'ref2' => $ref2,
-                  'refjump' => $refjump,
-                  'query1' => $query1,
-                  'query2' => $query2,
-                  'queryjump' => $queryjump,
-                  'comp' => $comp,
-                  'query1p' => $query1p,
-                  'query2p' => $query2p,
-                  };
-
-    write_simple_variant($ra_vcf_lines, $rh_var);
-}
-
-sub process_deletion {
-    my $delta_obj = shift;
-    my $left_align = shift;
-    my $right_align = shift;
-    my $chrom = shift;
-    my $contig = shift;
-    my $ref1 = shift;
-    my $query1 = shift;
-    my $ref2 = shift;
-    my $query2 = shift;
-    my $comp = shift;
-    my $type = shift;
-    my $svsize = shift;
-    my $refjump = shift;
-    my $queryjump = shift;
-    my $repeat_bases = shift;
-    my $ra_vcf_lines = shift;
-
-    print STDERR "Type $type comp $comp, varcontig $contig query1 $query1, query2 $query2, ref $chrom ref1 $ref1, ref2 $ref2\n" if ($Opt{verbose});
-    print STDERR "Refjump $refjump, query jump $queryjump, svsize $svsize\n" if ($Opt{verbose});
-
-    $delta_obj->find_ref_coords_from_query_coord($query1, $contig);
-    $delta_obj->find_ref_coords_from_query_coord($query2, $contig);
-
-    if (!$left_align->{ref_matches}->{$query1} || $ref1 != $left_align->{ref_matches}->{$query1}) {
-        die "REF1 $ref1 doesn\'t match $left_align->{ref_matches}->{$query1}\n"; 
-    }
-    
-    if (!$right_align->{ref_matches}->{$query2} || $ref2 != $right_align->{ref_matches}->{$query2}) {
-        die "REF2 $ref2 doesn\'t match $right_align->{ref_matches}->{$query2}\n"; 
-    }
-    
-    my $ref1p = $right_align->{ref_matches}->{$query1};
-    my $ref2p = $left_align->{ref_matches}->{$query2};
-
-    if (!defined($ref1p)) {
-        print STDERR "NONREPETITIVE DELETION (ref1p undefined)--need to check\n";
-        $ref1p = $ref2 - 1;
-    }
-    if (!defined($ref2p)) {
-        print STDERR "NONREPETITIVE DELETION (ref2p undefined)--need to check\n";
-        $ref2p = $ref1 + 1;
-    }
-
-    print STDERR "ref1p $ref1p corresponds to query $query1 in second align, ref2p $ref2p corresponds to query2 $query2 in first align\n" if ($Opt{verbose});
-
-    my $altpos = ($comp) ? $query2 + 1 : $query2 - 1;
-    my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
-    my $rh_var = {'type' => $type,
-                  'svsize' => -1.0*$svsize,
-                  'repbases' => $repeat_bases,
-                  'chrom' => $chrom,
-                  'pos' => $ref2p - 1,
-                  'end' => $ref2 - 1,
-                  'contig' => $contig,
-                  'altpos' => $altpos,
-                  'altend' => $altend,
-                  'ref1' => $ref1,
-                  'ref2' => $ref2,
-                  'refjump' => $refjump,
-                  'query1' => $query1,
-                  'query2' => $query2,
-                  'queryjump' => $queryjump,
-                  'comp' => $comp,
-                  'ref1p' => $ref1p,
-                  'ref2p' => $ref2p,
-                 };
-
-    write_simple_variant($ra_vcf_lines, $rh_var);
 }
 
 sub write_simple_variant {
     my $ra_vcf_lines = shift;
-    my $rh_var = shift;
+    my $align2sv_obj = shift;
 
-    my $vartype = $rh_var->{type};
-    my $svsize = $rh_var->{svsize};
-    my $repbases = $rh_var->{repbases};
-    my $chrom = $rh_var->{chrom};
-    my $pos = $rh_var->{pos};
-    my $end = $rh_var->{end};
-    my $varcontig = $rh_var->{contig};
-    my $altpos = $rh_var->{altpos};
-    my $altend = $rh_var->{altend};
-    my $ref1 = $rh_var->{ref1};
-    my $ref2 = $rh_var->{ref2};
-    my $refjump = $rh_var->{refjump};
-    my $query1 = $rh_var->{query1};
-    my $query2 = $rh_var->{query2};
-    my $queryjump = $rh_var->{queryjump};
-    my $comp = $rh_var->{comp};
-    my $query1p = $rh_var->{query1p};
-    my $query2p = $rh_var->{query2p};
-    my $ref1p = $rh_var->{ref1p};
-    my $ref2p = $rh_var->{ref2p};
+    my $vartype = $align2sv_obj->{type};
+    my $svsize = $align2sv_obj->{svsize};
+    my $repbases = $align2sv_obj->{repeat_bases};
+    my $chrom = $align2sv_obj->{left_align}->{ref_entry};
+    my $pos = ($vartype eq 'SIMPLEINS' || $vartype eq 'DUP') ? $align2sv_obj->{ref2} - 1 :
+              (($vartype eq 'SIMPLEDEL' || $vartype eq 'CONTRAC') ? $align2sv_obj->{ref2p} - 1 : $align2sv_obj->{ref1} + 1);
+    my $end = $align2sv_obj->{ref2} - 1;
+    my $varcontig = $align2sv_obj->{left_align}->{query_entry};
+    my $ref1 = $align2sv_obj->{ref1};
+    my $ref2 = $align2sv_obj->{ref2};
+    my $query1 = $align2sv_obj->{query1};
+    my $query2 = $align2sv_obj->{query2};
+    my $comp = $align2sv_obj->{left_align}->{comp};
+    my $query1p = $align2sv_obj->{query1p};
+    my $query2p = $align2sv_obj->{query2p};
+    my $ref1p = $align2sv_obj->{ref1p};
+    my $ref2p = $align2sv_obj->{ref2p};
+
+    my $altpos = ($vartype eq 'SIMPLEINS' || $vartype eq 'DUP') ? (($comp) ? $query2p + 1 : $query2p - 1) :
+                 (($vartype eq 'SIMPLEDEL' || $vartype eq 'CONTRAC') ? (($comp) ? $query2 + 1 : $query2 - 1) : 
+                                                                       (($comp) ? $query1 - 1 : $query1 + 1));
+    my $altend = ($comp) ? $query2 + 1 : $query2 - 1;
 
     my $chrlength = $ref_db->len($chrom);
     my $varcontiglength = $query_db->len($varcontig);
@@ -690,6 +549,7 @@ sub write_simple_variant {
 
         my $compstring = ($comp) ? '_comp' : '';
         my $svtype = 'INS';
+        $svsize = length($altseq) - length($refseq);
 
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2-$ref1;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query2p-$query1p$compstring";
         push @{$ra_vcf_lines}, "$varstring";
@@ -730,6 +590,7 @@ sub write_simple_variant {
             }
         }
         my $svtype = 'DEL';
+        $svsize = length($altseq) - length($refseq);
 
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;ALTPOS=$varcontig:$altpos-$altpos$compstring;ALTWIDENED=$varcontig:$query2-$query1$compstring";
@@ -737,7 +598,7 @@ sub write_simple_variant {
     }
     else { # complex "SUBS" types--note, this code is NOT appropriate for inversions!
         my ($refseq, $altseq) = ('N', 'N');
-        $svsize = ($vartype =~ /DEL/) ? -1.0*abs($svsize) : abs($svsize); # insertions always positive
+        $svsize = length($altseq) - length($refseq);
         my $svtype = ($vartype =~ /DEL/) ? 'DEL' : 'INS';
 
         if ($Opt{includeseqs}) {
