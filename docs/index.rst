@@ -23,14 +23,15 @@ or cloning the github repository::
 
 git clone git://github.com/nhansen/SVanalyzer.git
 
-After unzipping the tarball or cloning the directory, build SVanalyzer::
+After unzipping the tarball or cloning the directory, build SVanalyzer:
 
-   | cd SVanalyzer
-   | perl Build.PL
-   | ./Build
-   | ./Build test
-   | ./Build install
+::
 
+  cd SVanalyzer
+  perl Build.PL
+  ./Build
+  ./Build test
+  ./Build install
 
 Tools
 =======
