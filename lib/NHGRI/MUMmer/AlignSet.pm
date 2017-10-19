@@ -54,6 +54,12 @@ our $VERSION  = '0.01';
           for each query entry
           -extend_exact - option to extend alignments as far as is
           possible with exactly matching sequence
+          -reference_hashref - optional reference to hash of reference
+          sequences (will be used instead of reading fasta file to
+          extend alignments with -extend_exact option)
+          -query_hashref - optional reference to hash of query
+          sequences (will be used instead of reading fasta file to
+          extend alignments with -extend_exact option)
           -reference_file - option to set alternate reference file
           (rather than use reference_file present in delta file)
           -query_file - option to set alternate query file
@@ -70,6 +76,8 @@ sub new {
     my $storerefentrypairs = $params{-storerefentrypairs};
     my $storequeryentrypairs = $params{-storequeryentrypairs};
     my $extend_exact = $params{-extend_exact};
+    my $reference_hashref = $params{-reference_hashref};
+    my $query_hashref = $params{-query_hashref};
     my $reference_file = $params{-reference_file};
     my $query_file = $params{-query_file};
 
@@ -78,6 +86,8 @@ sub new {
                  storerefentrypairs => $storerefentrypairs,
                  storequeryentrypairs => $storequeryentrypairs,
                  extend_exact => $extend_exact,
+                 reference_hashref => $reference_hashref,
+                 query_hashref => $query_hashref,
                  reference_file => $reference_file,
                  query_file => $query_file,
                   };
@@ -135,8 +145,12 @@ sub _parse_delta_file {
             $self->{reference_file} = $self->{reference_file} || $1;
             $self->{query_file} = $self->{query_file} || $2;
             if ($self->{extend_exact}) {
-                $self->{ref_fasta_db} = GTB::FASTA->new($self->{reference_file});
-                $self->{query_fasta_db} = GTB::FASTA->new($self->{query_file});
+                if (!($self->{reference_hashref}) || !($self->{query_hashref})) { # need to read seqs from FASTA
+                    $self->{ref_fasta_db} = GTB::FASTA->new($self->{reference_file});
+                    $self->{query_fasta_db} = GTB::FASTA->new($self->{query_file});
+                    $self->{ref_fasta_db}->reindex();
+                    $self->{query_fasta_db}->reindex();
+                }
             }
         }
         elsif (/^\>(\S+)\s(\S+)\s(\d+)\s(\d+)$/) {
@@ -311,8 +325,14 @@ sub _extend_exact {
     my ($new_ref_start, $new_ref_end, $new_query_start, $new_query_end, $new_cigar) = 
        ($ref_start, $ref_end, $query_start, $query_end, $cigar);
 
+    my $rh_refseqs = $self->{reference_hashref};
+    my $rh_queryseqs = $self->{query_hashref};
+
     my $ref_fasta_db = $self->{ref_fasta_db};
     my $query_fasta_db = $self->{query_fasta_db};
+
+    my $ref_length = ($rh_refseqs) ? length($rh_refseqs->{$ref_entry}) : $ref_fasta_db->len($ref_entry);
+    my $query_length = ($rh_queryseqs) ? length($rh_queryseqs->{$query_entry}) : $query_fasta_db->len($query_entry);
 
     my $comp = ($query_start > $query_end) ? 1 : 0;
 
@@ -320,9 +340,11 @@ sub _extend_exact {
     my $ref_next_pos = $new_ref_end + 1;
     my $query_next_pos = ($comp) ? $new_query_end - 1 : $new_query_end + 1;
 
-    if ($ref_next_pos <= $ref_fasta_db->len($ref_entry) && $query_next_pos >= 1 && $query_next_pos <= $query_fasta_db->len($query_entry)) {
-        my $ref_next_base = uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
-        my $query_next_base = uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
+    if ($ref_next_pos <= $ref_length && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
+        my $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
+                                            uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
+        my $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
+                                                uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
         $query_next_base =~ tr/ATGC/TACG/ if ($comp);
     
         my $right_extend_bases = ($new_cigar =~ s/(\d+)M$//) ? $1 : 0;
@@ -335,21 +357,26 @@ sub _extend_exact {
             $ref_next_pos = $new_ref_end + 1;
             $query_next_pos = ($comp) ? $new_query_end - 1 : $new_query_end + 1;
             
-            last if ($ref_next_pos > $ref_fasta_db->len($ref_entry) || $query_next_pos < 1 || $query_next_pos > $query_fasta_db->len($query_entry));
-            $ref_next_base = uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
-            $query_next_base = uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
+            last if ($ref_next_pos > $ref_length || $query_next_pos < 1 || $query_next_pos > $query_length);
+            $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
+                             uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
+            $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
+                               uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
         }
         $new_cigar = $new_cigar.$right_extend_bases.'M' if ($right_extend_bases);
+        print STDERR "Rightside REF $ref_next_base does not match QUERY $query_next_base\n";
     }
 
     # extend to left:
     $ref_next_pos = $new_ref_start - 1;
     $query_next_pos = ($comp) ? $new_query_start + 1 : $new_query_start - 1;
 
-    if ($ref_next_pos >= 1 && $query_next_pos >= 1 && $query_next_pos <= $query_fasta_db->len($query_entry)) {
-        my $ref_next_base = uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
-        my $query_next_base = uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
+    if ($ref_next_pos >= 1 && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
+        my $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
+                            uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
+        my $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
+                              uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
         $query_next_base =~ tr/ATGC/TACG/ if ($comp);
     
         my $left_extend_bases = ($new_cigar =~ s/^(\d+)M//) ? $1 : 0;
@@ -362,17 +389,23 @@ sub _extend_exact {
             $ref_next_pos = $new_ref_start - 1;
             $query_next_pos = ($comp) ? $new_query_start + 1 : $new_query_start - 1;
 
-            last if ($ref_next_pos < 1 || $query_next_pos < 1 || $query_next_pos > $query_fasta_db->len($query_entry));
-            $ref_next_base = uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
-            $query_next_base = uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
+            last if ($ref_next_pos < 1 || $query_next_pos < 1 || $query_next_pos > $query_length);
+            $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
+                             uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
+            $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
+                             uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
         }
         $new_cigar = $left_extend_bases.'M'.$new_cigar if ($left_extend_bases);
+        print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n";
     }
 
     if ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end) {
-        #print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
-        #print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
+        print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
+        print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
+    }
+    else {
+        print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";
     }
 
     return ($new_ref_start, $new_ref_end, $new_query_start, $new_query_end, $new_cigar);
@@ -474,7 +507,7 @@ sub find_ref_coords_from_query_coord {
                 print STDERR "Reached query $current_query (end is $query_end), ref $current_ref (end is $ref_end) without finding match\n";
             }
             else {
-                print STDERR "Found match: $rh_align->{ref_matches}->{$query_pos}\n";
+                #print STDERR "Found match: $rh_align->{ref_matches}->{$query_pos}\n";
             }
         }
     }
