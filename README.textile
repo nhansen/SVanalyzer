@@ -45,5 +45,6 @@ p. For local installation, call "perl Build.PL" with "--install_base $HOME"
 
 h2. Documentation
 
-p. POD documentation is contained in all modules and scripts.  Type "perldoc script_or_module_name".
+p. POD documentation is contained in all modules and scripts by typing "perldoc script_or_module_name". In 
+addition, detailed command options and overall usage are available at http://svanalyzer.readthedocs.io/en/latest/#.
 
