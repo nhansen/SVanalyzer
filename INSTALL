@@ -3,11 +3,9 @@ SVanalyzer package
 INSTALLATION:
 
 In addition to the software included in this package, the user must have a working copy of 
-samtools installed and in ones path (version 0.1.16 or greater), as well as R (version 1.6.1
-or greater) with the "statmod" library (available at 
-http://cran.r-project.org/web/packages/statmod/index.html).
+samtools installed and in ones path (version 0.1.16 or greater).
 
-To install Shimmer system-wide (root permissions required):
+To install SVanalyzer system-wide (root permissions required):
 
     perl Build.PL
     ./Build
@@ -34,6 +32,6 @@ For local user installation:
 
 USAGE:
 
-Run perldoc shimmer.pl for complete documentation.
+See our documentation page at http://svanalyzer.readthedocs.io/en/latest/#.
 
 
