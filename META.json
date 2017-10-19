@@ -13,6 +13,13 @@
       "version" : "2"
    },
    "name" : "SVanalyzer",
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "Module::Build" : "0.36"
+         }
+      }
+   },
    "provides" : {
       "GTB::FASTA" : {
          "file" : "lib/GTB/FASTA.pm",
