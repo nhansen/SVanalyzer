@@ -5,7 +5,7 @@ use strict;
 use Test::More;
 use Module::Build;
 
-my @scripts = qw(blib/script/SVrefine.pl);
+my @scripts = qw(blib/script/SVrefine.pl blib/script/SVcomp.pl blib/script/SVwiden.pl);
 my @modules = qw();
 
 # Direct useless output to STDERR, to avoid confusing Test::Harness
