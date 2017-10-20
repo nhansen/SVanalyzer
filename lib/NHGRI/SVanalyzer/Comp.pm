@@ -197,10 +197,13 @@ sub calc_distance {
 
     if (${$rs_alt_hap1} eq ${$rs_alt_hap2}) { # identical variants
         print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n" if ($self->{verbose});
+        my $matchtype = 'EXACTMATCH';
         return {'edit_distance' => 0,
                 'max_shift' => 0,
+                'match_type' => $matchtype,
                 'altlength_diff' => $althaplength_diff,
                 'altlength_avg' => $althaplength_avg,
+                'minhaplength' => $minhaplength,
                 'size_diff' => $size2 - $size1,
                 'size_avg' => ( $size1 + $size2 )/2.0,
                 'shared_denominator' => $shared_denominator};
@@ -209,21 +212,27 @@ sub calc_distance {
         # align the alternative haplotypes to each other and evaluate
         my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2);
         if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
+            my $matchtype = 'NWMATCH';
             print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
+                    'match_type' => $matchtype,
                     'altlength_diff' => $althaplength_diff,
                     'altlength_avg' => $althaplength_avg,
+                    'minhaplength' => $minhaplength,
                     'size_diff' => $size2 - $size1,
                     'size_avg' => ( $size1 + $size2 )/2.0,
                     'shared_denominator' => $shared_denominator};
         }
         else {
             print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
+            my $matchtype = 'NWFAIL';
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
+                    'match_type' => $matchtype,
                     'altlength_diff' => $althaplength_diff,
                     'altlength_avg' => $althaplength_avg,
+                    'minhaplength' => $minhaplength,
                     'size_diff' => $size2 - $size1,
                     'size_avg' => ( $size1 + $size2 )/2.0,
                     'shared_denominator' => $shared_denominator};
@@ -307,7 +316,7 @@ sub compare_alt_haplotypes {
     my $tmpfasta2 = "$workingdir/$id2.$id1.fa";
     $self->write_fasta_file($tmpfasta2, "$id2\_alt", $rs_alt2);
 
-    my $edlib_aligner = '/home/nhansen/projects/SVanalyzer/edlib/edlib-1.1.2/build/bin/edlib-aligner';
+    my $edlib_aligner = 'edlib';
     my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
     unlink $tmpfasta1 unless ($params{'-nocleanup'});
     unlink $tmpfasta2 unless ($params{'-nocleanup'});

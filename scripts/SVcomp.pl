@@ -82,21 +82,12 @@ while (<$vcf1_fh>) {
 
     if ($comp_obj->potential_match()) {
         my $rh_distance_metrics = $comp_obj->calc_distance(); 
-        my $minhaplength = (length($alt_hap1) < length($alt_hap2)) ? length($alt_hap1) : length($alt_hap2);
+        my $edit_distance = $rh_distance_metrics->{edit_distance};
+        my $max_shift = $rh_distance_metrics->{max_shift};
+        my $minhaplength = $rh_distance_metrics->{minhaplength};
+        my $matchtype = $rh_distance_metrics->{matchtype};
     
-        if ($alt_hap1 eq $alt_hap2) { # identical variants
-            print "$varpairindex\t$id1\t$id2\tEXACTMATCH\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-        }
-        else {
-            # align the alternative haplotypes to each other and evaluate
-            my ($maxshift, $editdistance) = compare_haplotypes(\$alt_hap1, \$alt_hap2, $varpairindex);
-            if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
-                print "$varpairindex\t$id1\t$id2\tNWMATCH\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            }
-            else {
-                print "$varpairindex\t$id1\t$id2\tNWFAIL\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n";
-            }
-        }
+        print "$varpairindex\t$id1\t$id2\t$matchtype\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
     }
     else {
         print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
@@ -160,158 +151,6 @@ sub parse_vcf_line {
     }
 }
 
-sub construct_alt_hap {
-    my $fai_obj = shift;
-    my $chr = shift;
-    my $left = shift;
-    my $right = shift;
-    my $start = shift;
-    my $end = shift;
-    my $r_ref = shift;
-    my $r_alt = shift;
-
-    #my $alt_allele = uc($gtb_ref->seq("$chr:$left-$right"));
-    #print "Extracting sequence $chr:$left-$right\n";
-    my $alt_allele = uc($fai_obj->fetch("$chr:$left-$right"));
-    my $offset = $start - $left;
-    my $length = $end - $start + 1;
-    my $extracted_ref = substr($alt_allele, $offset, $length); 
-    if (($Opt{check_ref}) && ($extracted_ref ne ${$r_ref})) {
-        die "Extracted reference for $chr:$start-$end does not match provided REF!\n";
-    }
-
-    substr($alt_allele, $offset, $length) = ${$r_alt}; 
-
-    return $alt_allele;
-}
-
-sub compare_haplotypes {
-    my $r_alt1 = shift;
-    my $r_alt2 = shift;
-    my $pair_id = shift;
-
-    my $tmpfasta1 = "$workingdir/alt1.$pair_id.fa";
-    write_fasta_file($tmpfasta1, "Pair$pair_id.alt1", $r_alt1);
-    my $tmpfasta2 = "$workingdir/alt2.$pair_id.fa";
-    write_fasta_file($tmpfasta2, "Pair$pair_id.alt2", $r_alt2);
-
-    my $edlib_aligner = '/home/nhansen/projects/SVanalyzer/edlib/edlib-1.1.2/build/bin/edlib-aligner';
-    my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
-    if ($nw_output =~ /Cigar:\n(.*)/m) {
-        my $cigar_string = $1;
-        my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';
-        my $maxshift = calc_max_shift($cigar_string);
-        return ($maxshift, $score);
-    }
-    else {
-        return ('NA', 'NA');
-    }
-}
-
-sub potential_aligning_lengths {
-    my $size1 = shift;
-    my $size2 = shift;
-
-    my $minsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
-    if (abs($size1 - $size2) >= $minsize) {
-        return 0;
-    }
-    else {
-        return 1;
-    }
-}
-
-sub write_fasta_file {
-    my $fasta_file = shift;
-    my $seq_id = shift;
-    my $r_sequence = shift;
-
-    my $seq_fh = Open("$fasta_file", "w"); 
-    print $seq_fh ">seq_id\n";
-    my $r_alt_50 = format_50($r_sequence);
-    print $seq_fh ${$r_alt_50};
-    if (${$r_alt_50} !~ /\n$/) {
-        print $seq_fh "\n";
-    }
-    close $seq_fh;
-}
-
-# format a sequence string for writing to FASTA file
-sub format_50 {
-    my $r_seq = shift;
-
-    my $bases = 0;
-    my $revseq = reverse(${$r_seq});
-    my $formattedseq = '';
-    while (my $nextbase = chop $revseq) {
-        $formattedseq .= $nextbase;
-        $bases++;
-        if ($bases == 50) {
-            $formattedseq .= "\n";
-            $bases = 0;
-        }
-    }
-    if ($bases) { # need an extra enter
-        $formattedseq .= "\n";
-    }
-
-    return \$formattedseq;
-}
-
-sub calc_max_shift {
-    my $cigar = shift;
-
-    my ($max_shift, $current_shift) = (0, 0);
-    #print "Cigar: $cigar\n";
-    while ($cigar) {
-        my ($bases, $op);
-        if ($cigar =~ s/^(\d+)([MDI])//) {
-            ($bases, $op) = ($1, $2);
-            if ($op eq 'D') { # deleted from reference, decrease shift
-                $current_shift -= $bases;
-            }
-            elsif ($op eq 'I') { # deleted from reference--advance ref coord
-                $current_shift += $bases;
-            }
-            if (abs($current_shift) > abs($max_shift)) {
-                $max_shift = $current_shift;
-            }
-        }
-        else {
-            die "Cigar string $cigar is of the wrong form!\n";
-        }
-    }
-    #print "Max shift: $max_shift\n";
-
-    return $max_shift;
-}
-
-sub run_mummer {
-    my $fasta1 = shift;
-    my $fasta2 = shift;
-    my $nucmer_name = shift;
-
-    my $mummer_cmd_file = "$workingdir/run_mummer.$nucmer_name.sh";
-    my $mummer_fh = Open("$mummer_cmd_file", "w");
-    print $mummer_fh "#!/bin/bash\n/home/nhansen/projects/MUMmer/MUMmer3.23/nucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
-    close $mummer_fh;
-    chmod 0755, $mummer_cmd_file;
-    
-    my $cmd = "$mummer_cmd_file > $workingdir/nucmer.$nucmer_name.out 2> $workingdir/nucmer.$nucmer_name.err";
-    system($cmd) == 0
-        or print STDERR "Something went wrong running $mummer_cmd_file!\n";
-
-    if ($Opt{'cleanup'}) {
-        unlink $fasta1;
-        unlink $fasta2;
-        unlink "$workingdir/nucmer.$nucmer_name.err";
-        unlink "$workingdir/nucmer.$nucmer_name.coords";
-        unlink "$workingdir/nucmer.$nucmer_name.out";
-        unlink "$workingdir/run_mummer.$nucmer_name.sh";
-    }
-
-    return "$workingdir/nucmer.$nucmer_name.delta";
-}
 __END__
 
 =head1 OPTIONS
