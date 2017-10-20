@@ -6,7 +6,6 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use GTB::File qw(Open);
-use Bio::DB::Sam;
 use NHGRI::SVanalyzer::Comp;
 
 our %Opt;
@@ -39,7 +38,6 @@ my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
 
 my $ref_fasta = $Opt{ref};
 my $vcf_file = $Opt{vcf};
-my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
 my $max_distance = $Opt{max_dist};
 
 my $vcf_fh = Open($vcf_file);

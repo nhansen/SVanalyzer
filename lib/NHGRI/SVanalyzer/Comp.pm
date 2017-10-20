@@ -32,7 +32,7 @@ use warnings;
 
 use Carp;
 use GTB::File qw(Open);
-use Bio::DB::Sam;
+use GTB::FASTA;
 use File::Temp qw/ tempdir /;
 
 our $VERSION  = '0.01';
@@ -82,7 +82,7 @@ sub new {
     bless $self, $class;
 
     if ($ref_fasta) {
-        $self->{fai_obj} = Bio::DB::Sam::Fai->load($ref_fasta);
+        $self->{fasta_db} = GTB::FASTA->new($ref_fasta);
     }
 
     $self->_calculate_dependent_variables();
@@ -158,7 +158,6 @@ sub calc_distance {
 
     my $rh_sv1 = $self->{sv1_info};
     my $rh_sv2 = $self->{sv2_info};
-    my $fai_obj = $self->{fai_obj};
 
     my $ref1 = $rh_sv1->{ref};
     my $ref2 = $rh_sv2->{ref};
@@ -273,7 +272,7 @@ sub construct_alt_hap {
     my $right_bound = $params{-right_bound};
 
     my $chrom = $rh_sv->{chrom};
-    my $alt_allele = uc($self->{fai_obj}->fetch("$chrom:$left_bound-$right_bound")); # widened ref
+    my $alt_allele = uc($self->{fasta_db}->seq("$chrom:$left_bound-$right_bound")); # widened ref
     my $svstart = $rh_sv->{'pos'};
     my $offset = $svstart - $left_bound; # number of positions to move from first included base to ref start
     my $svend = $rh_sv->{'end'};

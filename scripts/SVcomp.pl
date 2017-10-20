@@ -6,7 +6,6 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use GTB::File qw(Open);
-use Bio::DB::Sam;
 use NHGRI::MUMmer::AlignSet;
 use NHGRI::SVanalyzer::Comp;
 
@@ -49,7 +48,6 @@ my $vcf_file2 = $ARGV[1];
 
 my $workingdir = $Opt{workdir};
 my $ref_fasta = $Opt{ref};
-#my $fai_obj = Bio::DB::Sam::Fai->load($ref_fasta);
 
 my $vcf1_fh = Open($vcf_file1);
 my $vcf2_fh = Open($vcf_file2);
