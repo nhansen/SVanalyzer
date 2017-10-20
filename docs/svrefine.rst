@@ -37,13 +37,11 @@ OPTIONS
         structural variants discovered in this comparison. BEWARE: if this
         file already exists, it will be overwritten!
 
-    --refname <string to include as the reference name in the VCF
-    header>
+    --refname <string to include as the reference name in the VCF header>
         Specify a string to be written as the reference name in the
         ##reference line of the VCF header.
 
-    --samplename <string to include as the sample name in the "CHROM"
-    line>
+    --samplename <string to include as the sample name in the "CHROM" line>
         Specify a string to be written as the sample name in the header
         specifying a genotype column in the VCF line beginning with "CHROM".
 
@@ -57,6 +55,4 @@ OPTIONS
         Display documentation. One "--help" gives a brief synopsis, "-h -h"
         shows all options, "--manual" provides complete documentation.
 
-
-        file's first line.
 
