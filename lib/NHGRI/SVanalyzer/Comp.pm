@@ -316,7 +316,7 @@ sub compare_alt_haplotypes {
     my $tmpfasta2 = "$workingdir/$id2.$id1.fa";
     $self->write_fasta_file($tmpfasta2, "$id2\_alt", $rs_alt2);
 
-    my $edlib_aligner = 'edlib';
+    my $edlib_aligner = 'edlib-aligner';
     my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
     unlink $tmpfasta1 unless ($params{'-nocleanup'});
     unlink $tmpfasta2 unless ($params{'-nocleanup'});

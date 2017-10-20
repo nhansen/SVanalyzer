@@ -34,6 +34,14 @@ Note that the VCF files don't need to be sorted, and in fact, depending on the e
 
 $|=1;
 
+my $edlib = `which edlib-aligner`;
+if (!$edlib) {
+    die "Running SVcomp requires that the edlib aligner (http://martinsosic.com/edlib/) be in your Linux path.\n";
+}
+else {
+    chomp $edlib;
+}
+
 process_commandline();
 
 my $vcf_file1 = $ARGV[0];
