@@ -1,5 +1,8 @@
 .. _svcomp:
 
+SVcomp
+===============
+
 NAME
     SVcomp.pl - calculate "distances" between structural variants in VCF
     format by constructing their alternate haplotypes and comparing them.

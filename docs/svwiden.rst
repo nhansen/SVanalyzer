@@ -1,5 +1,8 @@
 .. _svwiden:
 
+SVwiden
+===============
+
 NAME
     SVwiden.pl - Read a VCF file and use MUMmer to determine widened
     coordinates for structural variants, adding custom tags to the VCF record.

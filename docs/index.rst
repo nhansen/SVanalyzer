@@ -10,6 +10,11 @@ SVanalyzer
    :hidden:
    :maxdepth: 2
 
+   svrefine
+   svcomp
+   svmerge
+   svwiden
+
 `SVanalyzer <http://github.com/nhansen/SVanalyzer>`_ is a software package for the 
 analysis of large insertions, deletions, and inversions in DNA. SVanalyzer tools
 use repeat-aware methods to refine, compare, and cluster different structural 

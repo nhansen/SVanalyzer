@@ -1,5 +1,8 @@
 .. _svmerge:
 
+SVmerge
+===============
+
 NAME
     SVmerge.pl - group structural variants from a VCF file by calculating a
     distance matrix, then finding connected components of a graph.

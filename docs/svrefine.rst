@@ -1,5 +1,8 @@
 .. _svrefine:
 
+SVrefine
+===============
+
 NAME
     SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an
     assembly to the reference to refine structural variants in those regions
