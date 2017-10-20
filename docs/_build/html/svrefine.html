@@ -1,0 +1,172 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>&lt;no title&gt; &mdash; SVanalyzer 0.11 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.11',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="SVanalyzer 0.11 documentation" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <dl class="docutils">
+<dt>NAME</dt>
+<dd>SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an
+assembly to the reference to refine structural variants in those regions
+and print them out in VCF format.</dd>
+<dt>SYNOPSIS</dt>
+<dd><blockquote class="first">
+<div>SVrefine.pl &#8211;delta &lt;path to delta file of alignments&gt; &#8211;regions &lt;path to BED-formatted file of regions&gt; &#8211;ref_fasta &lt;path to reference multi-FASTA file&gt; &#8211;query_fasta &lt;path to query multi-FASTA file&gt; &#8211;outvcf &lt;path to output VCF file&gt; &#8211;outref &lt;path to bed file of homozygous reference regions&gt; &#8211;nocov &lt;path to bed file of regions with no coverage&gt;</div></blockquote>
+<p class="last">For complete documentation, run &#8220;SVrefine.pl -man&#8221;</p>
+</dd>
+<dt>OPTIONS</dt>
+<dd><table class="first docutils option-list" frame="void" rules="none">
+<col class="option" />
+<col class="description" />
+<tbody valign="top">
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--delta <var>&lt;path to delta file&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify a delta file produced by MUMmer with the alignments to be used
+for retrieving SV sequence information. Generally, one would use the
+same filtered delta file that was used to create the &#8220;diff&#8221; file (see
+below). (Required).</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--regions <var>&lt;path to a BED file of regions&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify a BED file of regions to be investigated for structural
+variants in the assembly (i.e., the query fasta file). (Required).</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--ref_fasta <var>&lt;path to reference multi-fasta file&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify the path to a multi-fasta file containing the sequences used
+as reference in the MUMmer alignment. If not specified on the command
+line, the script uses the reference path obtained by parsing the delta
+file&#8217;s first line.</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--query_fasta <var>&lt;path to query multi-fasta file&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify the path to a multi-fasta file containing the sequences used
+as the query in the MUMmer alignment. If not specified on the command
+line, the script uses the query path obtained by parsing the delta</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--outvcf <var>&lt;path to which to write a new VCF-formatted file&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify the path to which to write a new VCF file containing the
+structural variants discovered in this comparison. BEWARE: if this
+file already exists, it will be overwritten!</td></tr>
+</tbody>
+</table>
+<p>&#8211;refname &lt;string to include as the reference name in the VCF
+header&gt;</p>
+<blockquote>
+<div>Specify a string to be written as the reference name in the
+##reference line of the VCF header.</div></blockquote>
+<p>&#8211;samplename &lt;string to include as the sample name in the &#8220;CHROM&#8221;
+line&gt;</p>
+<blockquote>
+<div>Specify a string to be written as the sample name in the header
+specifying a genotype column in the VCF line beginning with &#8220;CHROM&#8221;.</div></blockquote>
+<table class="docutils option-list" frame="void" rules="none">
+<col class="option" />
+<col class="description" />
+<tbody valign="top">
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--maxsize <var>&lt;maximum size of SV to report&gt;</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Specify an integer for the maximum size of SV to report.</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">--noheader</span></kbd></td>
+<td>Flag option to suppress printout of the VCF header.</td></tr>
+</tbody>
+</table>
+<dl class="last docutils">
+<dt>&#8211;help|&#8211;manual</dt>
+<dd><p class="first">Display documentation. One &#8220;&#8211;help&#8221; gives a brief synopsis, &#8220;-h -h&#8221;
+shows all options, &#8220;&#8211;manual&#8221; provides complete documentation.</p>
+<p class="last">file&#8217;s first line.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/svrefine.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Nancy F. Hansen.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.6</a>
+      
+      |
+      <a href="_sources/svrefine.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
