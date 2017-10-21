@@ -24,7 +24,7 @@ Install
 ========
 
 SVanalyzer can be installed by downloading a `release tarball <https://github.com/nhansen/SVanalyzer/releases>`_
-or cloning the `<github repository https://github.com/nhansen/SVanalyzer>`_::
+or cloning the `github repository <https://github.com/nhansen/SVanalyzer>`_::
 
 git clone git://github.com/nhansen/SVanalyzer.git
 
