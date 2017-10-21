@@ -351,8 +351,8 @@ sub run_mummer {
 
     my $mummer_cmd_file = "$workingdir/run_mummer.$nucmer_name.sh";
     my $mummer_fh = Open("$mummer_cmd_file", "w");
-    print $mummer_fh "#!/bin/bash\n/home/nhansen/projects/MUMmer/MUMmer3.23/nucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
-    print $mummer_fh "/home/nhansen/projects/MUMmer/MUMmer3.23/delta-filter -q $workingdir/nucmer.$nucmer_name.delta > $workingdir/nucmer.$nucmer_name.qdelta\n";
+    print $mummer_fh "#!/bin/bash\nnucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
+    print $mummer_fh "delta-filter -q $workingdir/nucmer.$nucmer_name.delta > $workingdir/nucmer.$nucmer_name.qdelta\n";
     close $mummer_fh;
     chmod 0755, $mummer_cmd_file;
     
