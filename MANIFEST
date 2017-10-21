@@ -23,7 +23,6 @@ t/hs37d5_1start.fa.fai
 t/utg7180000002239.fa
 t/utg7180000002239.fa.fai
 t/regions.bed
-t/widened.vcf
 t/widen.vcf
 README.textile
 docs/conf.py
