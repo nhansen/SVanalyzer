@@ -85,7 +85,7 @@ sub new {
 
     bless $self, $class;
 
-    if (($ref_fasta) && (!$ref_db)) {
+    if (($ref_fasta) && (!$fasta_db)) {
         $self->{fasta_db} = GTB::FASTA->new($ref_fasta);
     }
 
@@ -348,7 +348,7 @@ sub compare_alt_haplotypes {
 =cut
 
 ###########################################################
-sub calculate_dependent_variables {
+sub _calculate_dependent_variables {
     my $self  = shift;
    
     $self->{sv1_info}->{reflength} = length($self->{sv1_info}->{ref}); 
@@ -481,6 +481,7 @@ sub calc_max_shift {
 ###########################################################
 
 1;
+
 __END__
 
 =back
