@@ -193,9 +193,10 @@ sub process_region {
 
     foreach my $ra_region (@{$ra_regions}) {
         my ($start, $end) = @{$ra_region};
+        my $regionstring = "$chrom:$start-$end";
 
         if (!check_region($ref_db, $chrom, $start, $end)) {
-            print STDERR "SKIPPING REGION $chrom\t$start\t$end because it is too close to chromosome end!\n" if ($Opt{verbose});
+            print STDERR "REGION $regionstring CHROMEND\n" if ($Opt{verbose});
             next;
         }
 
@@ -207,7 +208,6 @@ sub process_region {
 
         # find entries with at least one align spanning left and right contig align, with same comp value (can be a single align, or more than one)
 
-        print STDERR "PROCESSING REGION $chrom\t$start\t$end\n" if ($Opt{verbose});
         my @valid_entry_pairs = find_valid_entry_pairs($ra_rentry_pairs, $refleftstart, $refleftend, $refrightstart, $refrightend);
 
         if (!@valid_entry_pairs) { # no consistent alignments across region
@@ -218,7 +218,7 @@ sub process_region {
         my @aligned_contigs = map { $_->{query_entry} } @valid_entry_pairs;
         my $contig_string = join ':', @aligned_contigs;
         my $no_entry_pairs = @valid_entry_pairs;
-        print STDERR "VALID PAIRS $chrom\t$start\t$end $no_entry_pairs aligning contigs: $contig_string\n" if ($Opt{verbose});
+        print STDERR "REGION $regionstring ENTRYPAIRS $no_entry_pairs\n" if ($Opt{verbose});
 
         my @refaligns = ();
         foreach my $rh_rentry_pair (@valid_entry_pairs) { # for each contig aligned across region
@@ -248,9 +248,12 @@ sub process_region {
                     $nonref_found = 1;
                 }
             }
-            next if (!$nonref_found);
+            if (!$nonref_found) {
+                print STDERR "REGION $regionstring NOVARFOUND\n" if ($Opt{verbose});
+                next;
+            }
 
-            if (@region_aligns > 1) { # potential SV--print out alignments if verbose option
+            if (($Opt{verbose}) && (@region_aligns > 1)) { # potential SV--print out alignments if verbose option
                 foreach my $rh_align (@region_aligns) {
                     my $ref_entry = $rh_align->{ref_entry};
                     my $query_entry = $rh_align->{query_entry};
@@ -259,29 +262,35 @@ sub process_region {
                     my $query_start = $rh_align->{query_start};
                     my $query_end = $rh_align->{query_end};
     
-                    print STDERR "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n" if ($Opt{verbose});
+                    print STDERR "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n";
                 }
             }
 
             # if three or fewer alignments all to desired chrom, find left and right matches among aligns (or, at some point, deal with inversions):
-           
+         
+            my $all_aligns = @region_aligns;
+            my $reference_aligns = @ref_aligns;
+            my $nr_aligns = $all_aligns - $reference_aligns;
+            if ($nr_aligns) {
+                print STDERR "REGION $regionstring NONREFALIGNS $nr_aligns\n";
+            } 
             if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chrom} @region_aligns)) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
                 my @inversion_aligns = ();
                 if (@region_aligns == 2 && $region_aligns[0]->{comp} == $region_aligns[1]->{comp}) {
                     # order them, if possible, checking for consistency:
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1]);
-                    print STDERR "ONE SIMPLE BREAK\n" if (@simple_breaks==1) && ($Opt{verbose});
+                    print STDERR "REGION $regionstring ONESIMPLE\n" if (@simple_breaks==1) && ($Opt{verbose});
                 }
                 elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
                     ($region_aligns[1]->{comp} == $region_aligns[2]->{comp})) {
                     @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print STDERR "TWO SIMPLE BREAKS\n" if (@simple_breaks==2) && ($Opt{verbose});
+                    print STDERR "REGION $regionstring TWOSIMPLE\n" if (@simple_breaks==2) && ($Opt{verbose});
                 }
                 elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
                        ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
                     @inversion_aligns = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
-                    print STDERR "INVERSION!\n" if ($Opt{verbose});
+                    print STDERR "REGION $regionstring INVERSION\n" if ($Opt{verbose});
                 }
 
                 foreach my $ra_simple_break (@simple_breaks) {
@@ -308,11 +317,12 @@ sub process_region {
                     my $repeat_bases = $align2sv_obj->{repeat_bases};
   
                     if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
+                        print STDERR "REGION $regionstring ARTIFACT";
                         next;
                     }
 
                     if ($svsize > $Opt{maxsize}) {
-                        print STDERR "SKIPPING $type of size $svsize because it is larger than max size ($Opt{maxsize})\n";
+                        print STDERR "REGION $regionstring MAXSIZE\n";
                         next;
                     }
 
@@ -340,6 +350,9 @@ sub process_region {
         
                     process_inversion($delta_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
                 }
+            }
+            elsif (@region_aligns>3) {
+                print STDERR "REGION $regionstring MULTIALIGNS\n" if ($Opt{verbose});
             }
         }
     }
