@@ -165,7 +165,7 @@ sub write_target_header {
         }
         elsif (/^#CHROM/) {
             print $outfh "##FORMAT=<ID=GT,Number=1,Type=Integer,Description=\"Genotype\">\n";
-            print $outfh "##FORMAT=<ID=GTMT,Number=1,Type=Integer,Description=\"Level of allele matching: L=Inexact match, H=Exact match\">\n";
+            print $outfh "##FORMAT=<ID=GTMT,Number=1,Type=Character,Description=\"Level of allele matching: L=Inexact match, H=Exact match\">\n";
         }
         elsif (/^##/) {
             print $outfh $_;

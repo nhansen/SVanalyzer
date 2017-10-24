@@ -169,8 +169,6 @@ sub write_header {
     print $fh "##INFO=<ID=ALTWIDENED,Number=1,Type=String,Description=\"Widened boundaries of the event in the alternate allele\">\n";
     print $fh "##INFO=<ID=ALTPOS,Number=1,Type=String,Description=\"Position (CHROM:POS-END) of the event in the sample assembly\">\n";
     print $fh "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
-    print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
-    print $fh "##FORMAT=<ID=GTMATCH,Number=1,Type=Character,Description=\"Genotype match type: E=Exact match, H=Position boundary match, L=Inexact match\">\n";
     print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n";
 }
 
