@@ -49,6 +49,8 @@ our $VERSION  = '0.01';
   Input:  -ref_fasta - path to a valid FASTA-formatted file
           containing the reference sequences that were used
           in calling structural variants
+          -ref_db - path to a GTB::FASTA object (will be
+          created from -ref_fasta file if not specified)
           -sv1_info - reference to a hash containing the
           first SV call (required)
           -sv2_info - reference to a hash containing the 
@@ -65,11 +67,13 @@ sub new {
     my $class = shift;
     my %params = @_;
     my $ref_fasta = $params{-ref_fasta};
+    my $fasta_db = $params{-ref_db};
     my $rh_sv1 = $params{-sv1_info};
     my $rh_sv2 = $params{-sv2_info};
     my $workdir = $params{-workdir};
 
     my $self = { ref_fasta => $ref_fasta,
+                 fasta_db => $fasta_db,
                  sv1_info => $rh_sv1,
                  sv2_info => $rh_sv2,
                  workdir => $workdir,
@@ -81,7 +85,7 @@ sub new {
 
     bless $self, $class;
 
-    if ($ref_fasta) {
+    if (($ref_fasta) && (!$ref_db)) {
         $self->{fasta_db} = GTB::FASTA->new($ref_fasta);
     }
 
