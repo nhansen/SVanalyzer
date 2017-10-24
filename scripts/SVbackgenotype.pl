@@ -56,7 +56,7 @@ if (!$rh_sample_info->{$target_sample}) {
 
 my $output_vcf = $Opt{'outvcf'} || "out.multi.vcf";
 my $out_vcf_fh = Open($output_vcf, "w");
-write_header($out_vcf_fh);
+write_target_header($out_vcf_fh, $rh_sample_info->{$target_sample}->{vcffile});
 print $out_vcf_fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
 foreach my $sample (@{$ra_sample_order}) {
     print $out_vcf_fh "\t$sample";
@@ -71,7 +71,7 @@ write_multisample_vcf($target_sample, $ra_sample_order, $rh_sample_info, $out_vc
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( maxdist => 1000 );
+    %Opt = ( maxdist => 10000 );
     GetOptions(\%Opt, qw( ref=s target=s info=s maxdist=i outvcf=s skipns manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
@@ -144,29 +144,37 @@ sub read_ref_coverage {
     return [@ref_regions];
 }
 
-sub write_header {
-    my $fh = shift;
+sub write_target_header {
+    my $outfh = shift;
+    my $vcffile = shift;
 
-    print $fh "##fileformat=VCFv4.3\n";
-    my $date_obj = NISC::Sequencing::Date->new(-plain_language => 'today');
-    my $year = $date_obj->year();
-    my $month = $date_obj->month();
-    $month =~ s/^(\d)$/0$1/;
-    my $day = $date_obj->day();
-    $day =~ s/^(\d)$/0$1/;
-    print $fh "##fileDate=$year$month$day\n";
-    print $fh "##source=SVrefine.pl\n";
-    print $fh "##reference=$Opt{refname}\n" if ($Opt{refname});
-    print $fh "##ALT=<ID=DEL,Description=\"Deletion\">\n";
-    print $fh "##ALT=<ID=INS,Description=\"Insertion\">\n";
-    print $fh "##ALT=<ID=INV,Description=\"Inversion\">\n";
-    print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"Left end coordinate of SV\">\n";
-    print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, CON=Contraction, INS=Insertion, DUP=Duplication\">\n";
-    print $fh "##INFO=<ID=SVLEN,Number=.,Type=Integer,Description=\"Difference in length between ALT and REF alleles (negative for deletions from reference)\">\n";
-    print $fh "##INFO=<ID=HOMAPPLEN,Number=.,Type=Integer,Description=\"Length of alignable homology at event breakpoints as determined by MUMmer\">\n";
-    print $fh "##FORMAT=<ID=GT,Number=1,Type=Integer,Description=\"Genotype\">\n";
-    print $fh "##FORMAT=<ID=CONTIG,Number=1,Type=String,Description=\"Supporting contigs, in same order as alleles reported in genotype\">\n";
-    print $fh "##FORMAT=<ID=ALLELEMATCH,Number=1,Type=Integer,Description=\"Level of allele matching: 0=Inexact match, 1=Exact match\">\n";
+    my $vcf_fh = Open("$vcffile");
+
+    while (<$vcf_fh>) {
+        if (/^##source=/) {
+            print $outfh "##source=SVbackgenotype.pl\n"; # may want to keep old program?
+        }
+        elsif (/^##fileDate=/i) {
+            my $date_obj = NISC::Sequencing::Date->new(-plain_language => 'today');
+            my $year = $date_obj->year();
+            my $month = $date_obj->month();
+            $month =~ s/^(\d)$/0$1/;
+            my $day = $date_obj->day();
+            $day =~ s/^(\d)$/0$1/;
+            print $outfh "##fileDate=$year$month$day\n";
+        }
+        elsif (/^#CHROM/) {
+            print $outfh "##FORMAT=<ID=GT,Number=1,Type=Integer,Description=\"Genotype\">\n";
+            print $outfh "##FORMAT=<ID=GTMT,Number=1,Type=Integer,Description=\"Level of allele matching: L=Inexact match, H=Exact match\">\n";
+        }
+        elsif (/^##/) {
+            print $outfh $_;
+        }
+        elsif (!/^#/) {
+            last;
+        }
+    }
+    close $vcf_fh;
 }
 
 sub parse_vcf_line {
@@ -238,6 +246,8 @@ sub parse_vcf_line {
             die "Length of reference allele does not match provided POS, END!  Use --ignore_length option to ignore this discrepancy.\n";
         }
 
+        # don't need genotype fields:
+        $vcf_line =~ s/^(((\S+)\t){7}\S+).*$/$1/;
         $variant{vcfline} = $vcf_line;
         return { %variant };
     }
