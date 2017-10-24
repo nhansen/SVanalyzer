@@ -8,6 +8,7 @@ use Pod::Usage;
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
+use NHGRI::SVanalyzer::Comp;
 
 our %Opt;
 
@@ -30,6 +31,14 @@ The program creates a single VCF file for variants contained in the VCF file for
 #------------
 
 $|=1;
+
+my $edlib = `which edlib-aligner`;
+if (!$edlib) {
+    die "Running SVbackgenotype.pl requires that the edlib aligner (http://martinsosic.com/edlib/) be in your Linux path.\n";
+}
+else {
+    chomp $edlib;
+}
 
 process_commandline();
 
@@ -105,7 +114,7 @@ sub read_vcf_variants {
     while (<$vcf_fh>) {
         next if (/^#/);
         my $rh_var = parse_vcf_line($_);
-        next if ($Opt{skipns} && ($rh_var->{refseq} =~ /NNNNNN/ || $rh_var->{altseq} =~ /NNNNNN/));
+        next if ($Opt{skipns} && ($rh_var->{ref} =~ /NNNNNN/ || $rh_var->{alt} =~ /NNNNNN/));
         push @variants, parse_vcf_line($_);
     }
     close $vcf_fh;
@@ -170,13 +179,16 @@ sub parse_vcf_line {
 
         my %variant = ();
         $variant{chrom} = $chrom;
+        $variant{pos} = $start;
         $variant{start} = $start;
-        $variant{refseq} = $ref;
-        $variant{altseq} = $alt;
+        $variant{ref} = $ref;
+        $variant{alt} = $alt;
         $variant{info} = $info;
+        $variant{reflength} = length($ref);
+        $variant{altlength} = length($alt);
 
         if (($ref =~ /^([ATGC]+)$/) && ($alt =~ /^([ATGC]+)$/)) {
-            $variant{end} = $variant{start} + length($variant{refseq}) - 1;
+            $variant{end} = $variant{start} + length($variant{ref}) - 1;
         }
         else { # check for END= INFO tag
             if ($info =~ /END=\s*(\d+)/) {
@@ -216,12 +228,13 @@ sub parse_vcf_line {
 
         if ($info =~ /SVLEN=([^;]+)/) {
             $variant{svlen} = $1;
+            $variant{size} = $1;
         }
         else {
             print STDERR "Skipping variant at $variant{chrom}:$variant{start} with no SVLEN tag in INFO field!\n";
             return;
         }
-        if (!$Opt{'ignore_length'} && ($ref =~ /^([ATGC]+)$/) && ($variant{end} - $variant{start} + 1 != length($variant{refseq}))) {
+        if (!$Opt{'ignore_length'} && ($ref =~ /^([ATGC]+)$/) && ($variant{end} - $variant{start} + 1 != length($variant{ref}))) {
             die "Length of reference allele does not match provided POS, END!  Use --ignore_length option to ignore this discrepancy.\n";
         }
 
@@ -271,7 +284,7 @@ sub write_multisample_vcf {
         my $end = $rh_variant->{end};
         my $widemean = $rh_variant->{widemean};
         print "Processing $chrom:$widestart-$wideend\n";
-        print $mummer_fh "Processing $chrom:$widestart-$wideend\n";
+        print $mummer_fh "#Processing $chrom:$widestart-$wideend\n";
         my $svtype = $rh_variant->{svtype};
         my $svlen = $rh_variant->{svlen};
         my $vcfline = $rh_variant->{vcfline};
@@ -282,8 +295,9 @@ sub write_multisample_vcf {
             my @alleles = ();
             my @match_types = ();
 
-            # any HomRef coverage?
-            my @hr_regions = grep {$_->{chrom} eq $chrom && $_->{start} < $start && $_->{end} > $end} @{$rh_sample_info->{$sample}->{hr_regions}};
+            # any RefAllele coverage?
+            #my @hr_regions = grep {$_->{chrom} eq $chrom && $_->{start} < $start && $_->{end} > $end} @{$rh_sample_info->{$sample}->{hr_regions}};
+            my @hr_regions = grep {$_->{chrom} eq $chrom && $_->{start} < $widestart && $_->{end} > $wideend} @{$rh_sample_info->{$sample}->{hr_regions}};
             my $no_contigs = @hr_regions;
             #print "$sample has $no_contigs HR contigs\n";
             foreach my $rh_region (@hr_regions) {
@@ -296,6 +310,7 @@ sub write_multisample_vcf {
             if ($sample eq $target_sample) {
                 push @alleles, '1';
                 push @match_types, 'H';
+                # add mummerplot command for viewing:
                 my $refstart = $widestart - 500;
                 my $refend = $wideend + 500;
                 my $contigstart = ($rh_variant->{contigcomp}) ? $rh_variant->{contigwideend} - 500 : $rh_variant->{contigwidestart} - 500;
@@ -354,61 +369,22 @@ sub find_best_potential_match {
     my $rh_var = shift;
     my $ra_potential_matches = shift;
 
-    my $out1_vcf_fh = Open("ref_var.vcf", "w");
-    my $out2_vcf_fh = Open("pot_vars.vcf", "w");
-
-    my $pairno = 1;
     foreach my $rh_potential_match (@{$ra_potential_matches}) {
-        $rh_var->{vcfline} =~ s/^(\S+)\t(\S+)\t(\.)/$1\t$2\tPair$pairno/;
-        $rh_potential_match->{vcfline} =~ s/^(\S+)\t(\S+)\t(\.)/$1\t$2\tPair$pairno/;
-        print $out1_vcf_fh $rh_var->{vcfline};
-        print $out2_vcf_fh $rh_potential_match->{vcfline};
-    }
-
-    close $out1_vcf_fh;
-    close $out2_vcf_fh;
-
-    system("/home/nhansen/projects/SVanalyzer/github/SVanalyzer/scripts/SVcomp.pl --ref $Opt{ref} ref_var.vcf pot_vars.vcf > SVcomp.out 2>&1");
-
-    my $results_fh = Open("SVcomp.out");
-
-    while (<$results_fh>) {
-        if (/MATCH/) {
-            print "FOUND MATCH!!!\n$_";
-            my $pairno = (/^Pair(\d+)/) ? $1 : undef;
-            if (!defined($pairno)) {
-                print STDERR "No pair number found in line: $_\n";
+        my $comp_obj = NHGRI::SVanalyzer::Comp->new(-sv1_info => $rh_var,
+                                                    -sv2_info => $rh_potential_match,
+                                                    -ref_db => $ref_obj);
+        print STDERR "Comparing to potential match!\n";
+        if ($comp_obj->potential_match()) {
+            print STDERR "Calculating distances!\n";
+            my $rh_distance_metrics = $comp_obj->calc_distance();
+            if ($rh_distance_metrics->{match_type} =~ /MATCH/) {
+               return $rh_potential_match;
             }
-            $pairno--;
-            return $ra_potential_matches->[$pairno];
         }
+
     }
-    close $results_fh;
 
     return undef;
-
-}
-
-# format a sequence string for writing to FASTA file
-sub format_50 {
-    my $r_seq = shift;
-
-    my $bases = 0;
-    my $revseq = reverse(${$r_seq});
-    my $formattedseq = '';
-    while (my $nextbase = chop $revseq) {
-        $formattedseq .= $nextbase;
-        $bases++;
-        if ($bases == 50) {
-            $formattedseq .= "\n";
-            $bases = 0;
-        }
-    }
-    if ($bases) { # need an extra enter
-        $formattedseq .= "\n";
-    }
-
-    return \$formattedseq;
 }
 
 __END__
