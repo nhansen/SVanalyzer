@@ -38,6 +38,16 @@ For complete documentation, run C<SVwiden.pl -man>
 # Begin MAIN 
 #------------
 
+my $nucmer = `which nucmer`;
+my $filterdiff = `which delta-filter`;
+if ((!$nucmer) || (!$filterdiff)) {
+    die "Running SVwiden requires that the MUMmer tools \'nucmer\' and \'delta-filter\' (http://mummer.sourceforge.net/) be in your Linux path.\n";
+}
+else {
+    chomp $nucmer;
+    chomp $filterdiff;
+}
+
 process_commandline();
 
 my $ref_fasta = $Opt{ref};
