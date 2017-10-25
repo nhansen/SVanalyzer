@@ -15,19 +15,15 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-my $no_tests = 0;
-if ($has_samtools) {
-    $no_tests += 2;
-}
-if ($has_samtools && $has_nucmer && $has_delta_filter) {
-    $no_tests += 2;
-}
-plan tests => $no_tests;
+plan tests => 4;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
 my $script = 'blib/script/SVrefine.pl';
-if ($has_samtools) {
+
+SKIP: {
+    ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 2;
+
     system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
     $out = `grep '#' t/refined.vcf | wc -l`;
     like $out, qr/^\s*13\s*$/, "$script headerlines";
@@ -36,13 +32,12 @@ if ($has_samtools) {
     #system("rm t/test1.out");
     #system("rm t/test1.vcf");
 }
-else {
-    print "Skipping SVrefine.pl tests--no samtools in path!\n";
-}
 
-# Test SVwiden:
-$script = 'blib/script/SVwiden.pl';
-if ($has_samtools && $has_nucmer && $has_delta_filter) {
+SKIP: {
+    # Test SVwiden:
+    ($has_samtools && $has_nucmer && $has_delta_filter) or skip "Skipping SVwiden tests because one of samtools, nucmer or delta-filter in path", 2;
+    $script = 'blib/script/SVwiden.pl';
+    
     mkdir "t/test";
     system("perl -w -I lib $script --invcf t/widen.vcf --outvcf t/widened.vcf --ref t/hs37d5_1start.fa --workdir t/test > t/test2.out 2>&1");
     $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
@@ -51,7 +46,4 @@ if ($has_samtools && $has_nucmer && $has_delta_filter) {
     like $out, qr/REFWIDENED=1:842056-842090/, "$script widensmall";
     #system("rm t/widened.vcf");
     #system("rm t/test2.out");
-}
-else {
-    print "Skipping SVwiden tests--must have samtools, nucmer, and delta-filter in path!\n";
 }
