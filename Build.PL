@@ -12,17 +12,17 @@ my $build = Module::Build->new(
         configure_requires      => { 'Module::Build' => '0.36' },
         requires      => { },
         );
-if (!(`which samtools`)) {
+if (!(`which samtools 2>/dev/null`)) {
     warn "ERROR: samtools executable is not found.\nSVanalyzer scripts requires "
         . "the samtools executable to be in the user's PATH\n";
 }
-if (!(`which edlib-aligner`)) {
-    warn "ERROR: Please install the edlib aligner (http://martinsosic.com/edlib/).\nThis script requires "
+if (!(`which edlib-aligner 2>/dev/null`)) {
+    warn "ERROR: Please install the edlib aligner (http://martinsosic.com/edlib/).\nSVanalyzer requires "
         . "the edlib-aligner binary to be in the user's PATH\n";
 }
-if (!(`which nucmer`) || !(`which delta-filter`)) {
-    warn "ERROR: Please install the edlib aligner (http://martinsosic.com/edlib/).\nThis script requires "
-        . "the edlib-aligner binary to be in the user's PATH\n";
+if (!(`which nucmer 2>/dev/null`) || !(`which delta-filter 2>/dev/null`)) {
+    warn "ERROR: Please install the MUMmer alignment tools (available at http://mummer.sourceforge.net/).\nSVanalyzer requires "
+        . "the executables for nucmer and delta-filter to be in the user's PATH\n";
 }
 $build->create_build_script;
 
