@@ -651,7 +651,7 @@ sub write_variants_to_vcf {
         if (!$written{"$pos:$end"}) {
             print $vcf_fh "$vcf_line\tGT\t$gt\n";
             $written{"$pos:$end"} = 1;
-            if ($vcf_line =~ /REFWIDENED=(\S+):(\d+)-(\d+)/) {
+            if ($vcf_line =~ /REFWIDENED=([^:]+):(\d+)-(\d+)/) {
                 my ($chrom, $start, $end) = ($1, $2, $3);
                 $start--;
                 print $region_fh "$chrom\t$start\t$end\n" if ($region_fh);
