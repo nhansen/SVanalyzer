@@ -34,6 +34,9 @@ process_commandline();
 my $query_fasta = $Opt{query_fasta}; # will use values from delta file if not supplied as arguments
 my $ref_fasta = $Opt{ref_fasta}; # will use values from delta file if not supplied as arguments
 
+$ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta && $ref_fasta !~ m:^/:);
+$query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta && $query_fasta !~ m:^/:);
+
 my $delta_file = $Opt{delta};
 my $regions_file = $Opt{regions};
 
@@ -64,9 +67,6 @@ my $delta_obj = NHGRI::MUMmer::AlignSet->new(
 # set up assembly FASTA objects:
 $ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);
 $query_fasta = $delta_obj->{query_file} if (!$query_fasta);
-
-$ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta !~ m:^/:);
-$query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta !~ m:^/:);
 
 my $ref_db = GTB::FASTA->new($ref_fasta);
 my $query_db = GTB::FASTA->new($query_fasta);
