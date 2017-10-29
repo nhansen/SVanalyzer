@@ -19,7 +19,7 @@ SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assem
 
 =head1 SYNOPSIS
 
-  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage>
+  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --svregions <path to bed file of widened SV regions>
 
 For complete documentation, run C<SVrefine.pl -man>
 
@@ -48,6 +48,9 @@ my $refregions_fh = Open($refbedfile, "w"); # will write regions with support fo
 my $nocovbedfile = $Opt{nocov}; # file to write regions with no coverage in the assembly
 my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no coverage to bed formatted file 
 
+my $svregionsfile = $Opt{svregions}; # file to write widened SV regions
+my $svregions_fh = Open($svregionsfile, "w") if ($svregionsfile); # will write widened SV regions to bed formatted file 
+
 write_header($outvcf_fh) if (!$Opt{noheader});
 
 my $delta_obj = NHGRI::MUMmer::AlignSet->new(
@@ -75,12 +78,13 @@ foreach my $chrom (@ref_entries) {
         my $ra_variant_lines = [];
         my $ra_ref_cov = []; # regions covered with a reference-matching contig
         process_region($chrom, $ra_regions, $delta_obj, $nocovregions_fh, $ref_db, $query_db, $ra_variant_lines, $ra_ref_cov); # populates $ra_variant_lines, $ra_ref_cov
-        write_variants_to_vcf($outvcf_fh, $refregions_fh, $ra_variant_lines, $ra_ref_cov);
+        write_variants_to_vcf($outvcf_fh, $refregions_fh, $svregions_fh, $ra_variant_lines, $ra_ref_cov);
     }
 }
 
 close $outvcf_fh;
 close $refregions_fh;
+close $svregions_fh if ($svregions_fh);
 close $nocovregions_fh;
 
 #------------
@@ -629,6 +633,7 @@ sub write_simple_variant {
 sub write_variants_to_vcf {
     my $vcf_fh = shift;
     my $ref_fh = shift;
+    my $region_fh = shift;
     my $ra_variant_lines = shift;
     my $ra_ref_cov = shift;
 
@@ -642,6 +647,11 @@ sub write_variants_to_vcf {
         if (!$written{"$pos:$end"}) {
             print $vcf_fh "$vcf_line\tGT\t$gt\n";
             $written{"$pos:$end"} = 1;
+            if ($vcf_line =~ /REFWIDENED=(\S+):(\d+)-(\d+)/) {
+                my ($chrom, $start, $end) = ($1, $2, $3);
+                $start--;
+                print $region_fh "$chrom\t$start\t$end\n";
+            }
         }
     }
 
@@ -733,6 +743,17 @@ Specify an integer for the maximum size of SV to report.
 =item B<--noheader>
 
 Flag option to suppress printout of the VCF header.
+
+=item B<--nocov <path to write a BED file with "no coverage" regions>>
+
+Specify the path to which to write a BED file containing the regions of
+the input BED file which had no spanning coverage in the query alignments.
+
+=item B<--svregions <path to write a BED file with widened SV regions>>
+
+Specify the path to which to write a BED file containing the widened coordinates
+of structural variants. These are the same coordinates reported in the "WIDENEDREF"
+tag in the variant VCF.
 
 =item B<--help|--manual>
 
