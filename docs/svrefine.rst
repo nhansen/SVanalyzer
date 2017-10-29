@@ -54,6 +54,16 @@ OPTIONS
     --noheader
         Flag option to suppress printout of the VCF header.
 
+    --nocov <path to write a BED file with "no coverage" regions>
+        Specify the path to which to write a BED file containing the regions
+        of the input BED file which had no spanning coverage in the query
+        alignments.
+
+    --svregions <path to write a BED file with widened SV regions>
+        Specify the path to which to write a BED file containing the widened
+        coordinates of structural variants. These are the same coordinates
+        reported in the "WIDENEDREF" tag in the variant VCF.
+
     --help|--manual
         Display documentation. One "--help" gives a brief synopsis, "-h -h"
         shows all options, "--manual" provides complete documentation.
