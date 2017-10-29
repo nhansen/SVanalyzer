@@ -15,25 +15,25 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 4;
+plan tests => 5;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
 my $script = 'blib/script/SVrefine.pl';
 
 SKIP: {
-    ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 2;
+    ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 3;
 
     system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
     $out = `grep '#' t/refined.vcf | wc -l`;
     like $out, qr/^\s*13\s*$/, "$script headerlines";
     $out = `awk -F"\t" '\$2==1016054 {print \$8}' t/refined.vcf`;
     like $out, qr/REPTYPE=SIMPLEINS/, "$script vartype";
+    system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --svregions refine.sv.bed --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
+    $out = `wc -l t/regions.bed`;
+    like $out, qr/^\s*40\s/, "$script svregions";
     #system("rm t/test1.out");
     #system("rm t/test1.vcf");
-    system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --svregions refine.sv.bed --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
-    #$out = `grep '#' t/refined.vcf | wc -l`;
-    #like $out, qr/^\s*13\s*$/, "$script headerlines";
 }
 
 SKIP: {
