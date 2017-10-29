@@ -65,6 +65,9 @@ my $delta_obj = NHGRI::MUMmer::AlignSet->new(
 $ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);
 $query_fasta = $delta_obj->{query_file} if (!$query_fasta);
 
+$ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta !~ m:^/:);
+$query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta !~ m:^/:);
+
 my $ref_db = GTB::FASTA->new($ref_fasta);
 my $query_db = GTB::FASTA->new($query_fasta);
 
