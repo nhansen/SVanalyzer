@@ -31,6 +31,9 @@ SKIP: {
     like $out, qr/REPTYPE=SIMPLEINS/, "$script vartype";
     #system("rm t/test1.out");
     #system("rm t/test1.vcf");
+    system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --svregions refine.sv.bed --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
+    #$out = `grep '#' t/refined.vcf | wc -l`;
+    #like $out, qr/^\s*13\s*$/, "$script headerlines";
 }
 
 SKIP: {

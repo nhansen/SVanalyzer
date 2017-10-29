@@ -94,8 +94,9 @@ close $nocovregions_fh;
 sub process_commandline {
     # Set defaults here
     %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0 );
-    GetOptions(\%Opt, qw( delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s nocov=s buffer=i 
-                           bufseg=i maxsize=i verbose includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s
+                          nocov=s buffer=i svregions=s bufseg=i maxsize=i verbose
+                          includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVrefine.pl, ", q$Revision: 7771 $, "\n"; }
