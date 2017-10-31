@@ -54,8 +54,6 @@ my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no cov
 my $svregionsfile = $Opt{svregions}; # file to write widened SV regions
 my $svregions_fh = Open($svregionsfile, "w") if ($svregionsfile); # will write widened SV regions to bed formatted file 
 
-write_header($outvcf_fh) if (!$Opt{noheader});
-
 my $delta_obj = NHGRI::MUMmer::AlignSet->new(
                   -delta_file => $delta_file,
                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
@@ -72,7 +70,10 @@ my $ref_db = GTB::FASTA->new($ref_fasta);
 my $query_db = GTB::FASTA->new($query_fasta);
 
 my @ref_entries = $ref_db->ids(); # ordered as in fasta index
-my $rh_regions = read_regions_file($regions_file);
+my $rh_regions = ($regions_file) ? read_regions_file($regions_file) :
+                                   discover_regions($delta_obj, $ref_db);
+
+write_header($outvcf_fh) if (!$Opt{noheader});
 
 # cycle through regions and call variants:
 foreach my $chrom (@ref_entries) {
@@ -109,9 +110,8 @@ sub process_commandline {
         pod2usage(0);
     }
 
-    if (!($Opt{regions})) {
-        print STDERR "Must specify a regions BED file path with --regions option!\n"; 
-        pod2usage(0);
+    if (!($Opt{regions})) { # discovered regions need padding
+        $Opt{buffer} = 1000;
     }
 
     if (!($Opt{outvcf})) {
@@ -154,6 +154,47 @@ sub read_regions_file {
     return {%regions_hash};
 
 } ## end read_regions_file
+
+sub discover_regions {
+    my $delta_obj = shift;
+    my $ref_db = shift;
+
+    my $rh_ref_entrypairs = $delta_obj->{refentrypairs};
+    my %regions_hash = (); # by chromosome, then list of regions
+    
+    my $no_regions = 0; 
+    foreach my $chrom (keys %{$rh_ref_entrypairs}) {
+        my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
+        my @ref_starts = ();
+        my @ref_ends = ();
+        foreach my $entry_pair (@{$ra_rentry_pairs}) {
+            my $current_end;
+            my @aligns = @{$entry_pair->{aligns}};
+            foreach my $rh_align (sort byleftthenright @aligns) {
+                if ($current_end) {
+                    if ($rh_align->{ref_start} < $current_end) { # overlap
+                        push @{$regions_hash{$chrom}}, [$rh_align->{ref_start}, $current_end];
+                    }
+                    else {
+                        push @{$regions_hash{$chrom}}, [$current_end, $rh_align->{ref_start}];
+                    }
+                    $no_regions++;
+                }
+                $current_end = $rh_align->{ref_end};
+            }
+
+            sub byleftthenright {
+                my ($start_a, $end_a) = ($a->{ref_start}, $a->{ref_end});
+                my ($start_b, $end_b) = ($b->{ref_start}, $b->{ref_end});
+                my $ret_val = ($start_a <=> $start_b) ? $start_a <=> $start_b : $end_a <=> $end_b;
+                return $ret_val;
+            }
+        }
+    }
+    print STDERR "Discovered $no_regions regions\n" if ($Opt{verbose});
+    return {%regions_hash};
+
+} ## end discover_regions
 
 sub write_header {
     my $fh = shift;
@@ -707,8 +748,9 @@ filtered delta file that was used to create the "diff" file (see below).
 =item B<--regions <path to a BED file of regions>>
 
 Specify a BED file of regions to be investigated for structural variants
-in the assembly (i.e., the query fasta file).
-(Required).
+in the assembly (i.e., the query fasta file). If not provided, potential
+regions with structural variation are discovered from the endpoints of 
+alignments in the supplied MUMmer alignment file. (Optional).
 
 =item B<--ref_fasta <path to reference multi-fasta file>>
 
