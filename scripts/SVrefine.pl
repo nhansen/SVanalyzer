@@ -1,4 +1,7 @@
 #!/usr/bin/perl -w
+
+eval 'exec /usr/bin/perl -w -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
 # $Id:$
 
 use strict;
@@ -319,7 +322,7 @@ sub process_region {
             my $reference_aligns = @ref_aligns;
             my $nr_aligns = $all_aligns - $reference_aligns;
             if ($nr_aligns) {
-                print STDERR "REGION $regionstring NONREFALIGNS $nr_aligns\n";
+                print STDERR "REGION $regionstring NONREFALIGNS $nr_aligns\n" if ($Opt{verbose});
             } 
             if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chrom} @region_aligns)) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
@@ -438,19 +441,19 @@ sub find_valid_entry_pairs {
         else {
             my $no_left_aligns = @left_span_aligns;
             my $no_right_aligns = @right_span_aligns;
-            print STDERR "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n";
+            print STDERR "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n" if ($Opt{verbose});
         }
 
         # want to find the same comp value on left and right side:
         if (grep {$_->{comp} == 0} @left_span_aligns && grep {$_->{comp} == 0} @right_span_aligns) {
             $rh_entrypair->{comp} = 0;
             push @valid_entry_pairs, $rh_entrypair;
-            print STDERR "At least one forward alignment on left and right\n";
+            print STDERR "At least one forward alignment on left and right\n" if ($Opt{verbose});
         }
         elsif (grep {$_->{comp} == 1} @left_span_aligns && grep {$_->{comp} == 1} @right_span_aligns) {
             $rh_entrypair->{comp} = 1;
             push @valid_entry_pairs, $rh_entrypair;
-            print STDERR "At least one reverse alignment on left and right\n";
+            print STDERR "At least one reverse alignment on left and right\n" if ($Opt{verbose});
         }
         else {
             print STDERR "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";

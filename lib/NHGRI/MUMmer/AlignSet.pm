@@ -365,7 +365,7 @@ sub _extend_exact {
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
         }
         $new_cigar = $new_cigar.$right_extend_bases.'M' if ($right_extend_bases);
-        print STDERR "Rightside REF $ref_next_base does not match QUERY $query_next_base\n";
+        #print STDERR "Rightside REF $ref_next_base does not match QUERY $query_next_base\n";
     }
 
     # extend to left:
@@ -397,7 +397,7 @@ sub _extend_exact {
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
         }
         $new_cigar = $left_extend_bases.'M'.$new_cigar if ($left_extend_bases);
-        print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n";
+        #print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n";
     }
 
     if ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end) {
@@ -405,7 +405,7 @@ sub _extend_exact {
         print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
     }
     else {
-        print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";
+        #print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";
     }
 
     return ($new_ref_start, $new_ref_end, $new_query_start, $new_query_end, $new_cigar);
