@@ -324,22 +324,22 @@ sub process_region {
             if ($nr_aligns) {
                 print STDERR "REGION $regionstring NONREFALIGNS $nr_aligns\n" if ($Opt{verbose});
             } 
-            if ((@region_aligns <= 3) && !(grep {$_->{ref_entry} ne $chrom} @region_aligns)) { # simple insertion, deletion, or inversion
+            if (@ref_aligns <= 3) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
                 my @inversion_aligns = ();
-                if (@region_aligns == 2 && $region_aligns[0]->{comp} == $region_aligns[1]->{comp}) {
+                if (@ref_aligns == 2 && $ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) {
                     # order them, if possible, checking for consistency:
-                    @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1]);
+                    @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1]);
                     print STDERR "REGION $regionstring ONESIMPLE\n" if (@simple_breaks==1) && ($Opt{verbose});
                 }
-                elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} == $region_aligns[1]->{comp}) && 
-                    ($region_aligns[1]->{comp} == $region_aligns[2]->{comp})) {
-                    @simple_breaks = find_breaks($region_aligns[0], $region_aligns[1], $region_aligns[2]);
+                elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) && 
+                    ($ref_aligns[1]->{comp} == $ref_aligns[2]->{comp})) {
+                    @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
                     print STDERR "REGION $regionstring TWOSIMPLE\n" if (@simple_breaks==2) && ($Opt{verbose});
                 }
-                elsif ((@region_aligns==3) && ($region_aligns[0]->{comp} != $region_aligns[1]->{comp}) &&
-                       ($region_aligns[1]->{comp} != $region_aligns[2]->{comp})) {
-                    @inversion_aligns = ($region_aligns[0], $region_aligns[1], $region_aligns[2]);
+                elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} != $ref_aligns[1]->{comp}) &&
+                       ($ref_aligns[1]->{comp} != $ref_aligns[2]->{comp})) {
+                    @inversion_aligns = ($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
                     print STDERR "REGION $regionstring INVERSION\n" if ($Opt{verbose});
                 }
 
@@ -401,7 +401,7 @@ sub process_region {
                     process_inversion($delta_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
                 }
             }
-            elsif (@region_aligns>3) {
+            elsif (@ref_aligns>3) {
                 print STDERR "REGION $regionstring MULTIALIGNS\n" if ($Opt{verbose});
             }
         }
