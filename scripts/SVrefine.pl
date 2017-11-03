@@ -22,7 +22,7 @@ SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assem
 
 =head1 SYNOPSIS
 
-  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --svregions <path to bed file of widened SV regions>
+  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage>
 
 For complete documentation, run C<SVrefine.pl -man>
 
@@ -765,14 +765,14 @@ alignments in the supplied MUMmer alignment file. (Optional).
 Specify the path to a multi-fasta file containing the sequences used as 
 reference in the MUMmer alignment.  If not specified on the command line,
 the script uses the reference path obtained by parsing the delta file's
-first line.
+first line. (Optional).
 
 =item B<--query_fasta <path to query multi-fasta file>>
 
 Specify the path to a multi-fasta file containing the sequences used as 
 the query in the MUMmer alignment.  If not specified on the command line,
 the script uses the query path obtained by parsing the delta file's
-first line.
+first line. (Optional).
 
 =item B<--outvcf <path to which to write a new VCF-formatted file>>
 
@@ -783,16 +783,16 @@ exists, it will be overwritten!
 =item B<--refname <string to include as the reference name in the VCF header>>
 
 Specify a string to be written as the reference name in the ##reference line 
-of the VCF header.
+of the VCF header. (Optional).
 
 =item B<--samplename <string to include as the sample name in the "CHROM" line>>
 
 Specify a string to be written as the sample name in the header specifying a 
-genotype column in the VCF line beginning with "CHROM".
+genotype column in the VCF line beginning with "CHROM". (Optional).
 
 =item B<--maxsize <maximum size of SV to report>>
 
-Specify an integer for the maximum size of SV to report. 
+Specify an integer for the maximum size of SV to report.  (Optional).
 
 =item B<--noheader>
 
@@ -801,13 +801,13 @@ Flag option to suppress printout of the VCF header.
 =item B<--nocov <path to write a BED file with "no coverage" regions>>
 
 Specify the path to which to write a BED file containing the regions of
-the input BED file which had no spanning coverage in the query alignments.
+the input BED file which had no spanning coverage in the query alignments. (Optional).
 
 =item B<--svregions <path to write a BED file with widened SV regions>>
 
 Specify the path to which to write a BED file containing the widened coordinates
 of structural variants. These are the same coordinates reported in the "WIDENEDREF"
-tag in the variant VCF.
+tag in the variant VCF. (Optional).
 
 =item B<--help|--manual>
 
