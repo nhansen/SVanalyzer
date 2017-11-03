@@ -689,16 +689,21 @@ sub write_variants_to_vcf {
     my @sorted_vcf_lines = sort byposthenend @{$ra_variant_lines};
 
     my %written = ();
+    my $id = 0;
     foreach my $vcf_line (@sorted_vcf_lines) {
         my ($pos, $end) = ($vcf_line =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
         my $gt = covered($ra_ref_cov, $pos, $end) ? '0/1' : '1';
         if (!$written{"$pos:$end"}) {
             print $vcf_fh "$vcf_line\tGT\t$gt\n";
             $written{"$pos:$end"} = 1;
-            if ($vcf_line =~ /REFWIDENED=([^:]+):(\d+)-(\d+)/) {
+            if ($region_fh && $vcf_line =~ /REFWIDENED=([^:]+):(\d+)-(\d+)/) {
                 my ($chrom, $start, $end) = ($1, $2, $3);
                 $start--;
-                print $region_fh "$chrom\t$start\t$end\n" if ($region_fh);
+                my @vcf_fields = split /\t/, $vcf_line;
+                my $info_field = $vcf_fields[7];
+                my $svtype = ($vcf_line =~ /SVTYPE=([^;]+)/) ? $1 : 'UNKNOWN';
+                $id++;
+                print $region_fh "$chrom\t$start\t$end\t$svtype\t$id\t$info_field\n" if ($region_fh);
             }
         }
     }

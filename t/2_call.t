@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 5;
+plan tests => 6;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -32,8 +32,8 @@ SKIP: {
     system("perl -w -I lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --svregions t/refine.sv.bed --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
     $out = `wc -l t/refine.sv.bed`;
     like $out, qr/^\s*3\s/, "$script svregions";
-    #system("rm t/test1.out");
-    #system("rm t/test1.vcf");
+    $out = `awk -F"\t" '\$2==1074450 {print \$6}' t/refine.sv.bed`;
+    like $out, qr/REPTYPE=CONTRAC/, "$script svbedregions";
 }
 
 SKIP: {
