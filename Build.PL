@@ -17,12 +17,11 @@ if (!(`which samtools 2>/dev/null`)) {
         . "the samtools executable to be in the user's PATH\n";
 }
 if (!(`which edlib-aligner 2>/dev/null`)) {
-    warn "ERROR: Please install the edlib aligner (http://martinsosic.com/edlib/).\nSVanalyzer requires "
-        . "the edlib-aligner binary to be in the user's PATH\n";
+    warn "WARNING: You do not have the edlib aligner (http://martinsosic.com/edlib/) in your path, so will be unable to run some SVanalyzer commands.\n";
 }
 if (!(`which nucmer 2>/dev/null`) || !(`which delta-filter 2>/dev/null`)) {
-    warn "ERROR: Please install the MUMmer alignment tools (available at http://mummer.sourceforge.net/).\nSVanalyzer requires "
-        . "the executables for nucmer and delta-filter to be in the user's PATH\n";
+    warn "WARNING: You do not seem to have the MUMmer alignment tools (available at http://mummer.sourceforge.net/) installed.\nSVanalyzer requires "
+        . "the executables for nucmer and delta-filter to be in the user's PATH to run some commands.\n";
 }
 $build->create_build_script;
 
