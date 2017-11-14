@@ -11,15 +11,15 @@ our %Opt;
 
 =head1 NAME
 
-clusterVCF.pl - print clusters of structural variants out in VCF format
+clusterVCF.pl - cluster structural variants from a VCF file and print the clusters of structural variants out in VCF format
 
 =head1 SYNOPSIS
 
-  clusterVCF.pl --clusters <cluster file> --vcf <variant file>
+  clusterVCF.pl --vcf <variant file>
 
 =head1 DESCRIPTION
 
-The program reads in structural variants from a VCF file, as well as a file of clustered variant IDs, then prints out a set of clustered variants, one cluster per line.
+The program reads in structural variants from a VCF file, then prints out a set of clustered variants, one cluster per line.
 
 =cut
 
@@ -31,7 +31,6 @@ $|=1;
 
 process_commandline();
 
-my $cluster_file = $Opt{cluster};
 my $vcf_file = $Opt{vcf};
 
 my $vcf_fh = Open($vcf_file);
