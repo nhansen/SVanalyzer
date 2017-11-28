@@ -79,13 +79,14 @@ my $rh_regions = ($regions_file) ? read_regions_file($regions_file) :
 write_header($outvcf_fh) if (!$Opt{noheader});
 
 # cycle through regions and call variants:
+my $id = 0;
 foreach my $chrom (@ref_entries) {
     my $ra_regions = $rh_regions->{$chrom};
     if ($ra_regions) {
         my $ra_variant_lines = [];
         my $ra_ref_cov = []; # regions covered with a reference-matching contig
         process_region($chrom, $ra_regions, $delta_obj, $nocovregions_fh, $ref_db, $query_db, $ra_variant_lines, $ra_ref_cov); # populates $ra_variant_lines, $ra_ref_cov
-        write_variants_to_vcf($outvcf_fh, $refregions_fh, $svregions_fh, $ra_variant_lines, $ra_ref_cov);
+        write_variants_to_vcf($outvcf_fh, $refregions_fh, $svregions_fh, $ra_variant_lines, $ra_ref_cov, \$id);
     }
 }
 
@@ -661,7 +662,6 @@ sub write_simple_variant {
     }
     else { # complex "SUBS" types--note, this code is NOT appropriate for inversions!
         my ($refseq, $altseq) = ('N', 'N');
-        $svsize = length($altseq) - length($refseq);
         my $svtype = ($vartype =~ /DEL/) ? 'DEL' : 'INS';
 
         if ($Opt{includeseqs}) {
@@ -671,6 +671,7 @@ sub write_simple_variant {
                 $altseq =~ tr/ATGC/TACG/;
             }
         }
+        $svsize = length($altseq) - length($refseq);
 
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref1-$ref2;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query1-$query2$compstring";
@@ -684,14 +685,15 @@ sub write_variants_to_vcf {
     my $region_fh = shift;
     my $ra_variant_lines = shift;
     my $ra_ref_cov = shift;
+    my $rs_id = shift;
 
     # write VCF lines in order, adding genotypes and avoiding redundancy:
     my @sorted_vcf_lines = sort byposthenend @{$ra_variant_lines};
 
     my %written = ();
-    my $id = 0;
     foreach my $vcf_line (@sorted_vcf_lines) {
         my ($pos, $end) = ($vcf_line =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
+        next if ($vcf_line =~ /N{50}/); # don't write variants that are due to scaffolding
         my $gt = covered($ra_ref_cov, $pos, $end) ? '0/1' : '1';
         if (!$written{"$pos:$end"}) {
             print $vcf_fh "$vcf_line\tGT\t$gt\n";
@@ -702,8 +704,8 @@ sub write_variants_to_vcf {
                 my @vcf_fields = split /\t/, $vcf_line;
                 my $info_field = $vcf_fields[7];
                 my $svtype = ($vcf_line =~ /SVTYPE=([^;]+)/) ? $1 : 'UNKNOWN';
-                $id++;
-                print $region_fh "$chrom\t$start\t$end\t$svtype\t$id\t$info_field\n" if ($region_fh);
+                ${$rs_id}++;
+                print $region_fh "$chrom\t$start\t$end\t$svtype\t$$rs_id\t$info_field\n" if ($region_fh);
             }
         }
     }
