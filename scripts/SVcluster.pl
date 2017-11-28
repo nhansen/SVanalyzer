@@ -66,11 +66,21 @@ my $rh_distances = {}; # hash of distance arrays for pairs of ids
 while (<$dist_fh>) {
 
     chomp;
-    my ($id1, $id2, $posdiff, $relshift, $relsizediff, $reldist) = split /\t/, $_;
+    s/^DIST\s//; # some versions of distance file have "DIST\t" at beginning of each line
+    my $line = $_;
+    my @fields = split /\t/, $line; # first two fields must be ids, last four dist measures
+    my $id1 = $fields[0];
+    my $id2 = $fields[1];
+    my $posdiff = $fields[$#fields-3];
+    my $relshift = $fields[$#fields-2];
+    my $relsizediff = $fields[$#fields-1];
+    my $reldist = $fields[$#fields];
     next if ($id1 eq 'ID1');
+    next if ($id1 =~ /Read \d+ SVs/);
+    #next if (!$id1);
 
     if (!(defined($reldist))) {
-        print "Skipping line--not enough fields:\n$_\n";
+        print "Skipping line--not enough fields:\n$line\n";
         next;
     }
     if ($posdiff <= $max_posdiff && $relshift <= $max_relshift &&
