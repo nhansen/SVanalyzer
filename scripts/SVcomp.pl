@@ -53,6 +53,7 @@ my $vcf1_fh = Open($vcf_file1);
 my $vcf2_fh = Open($vcf_file2);
 
 my $varpairindex = 1;
+print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 while (<$vcf1_fh>) {
     next if (/^#/);
 
@@ -88,12 +89,26 @@ while (<$vcf1_fh>) {
 
     if ($comp_obj->potential_match()) {
         my $rh_distance_metrics = $comp_obj->calc_distance(); 
-        my $edit_distance = $rh_distance_metrics->{edit_distance};
-        my $max_shift = $rh_distance_metrics->{max_shift};
-        my $minhaplength = $rh_distance_metrics->{minhaplength};
-        my $matchtype = $rh_distance_metrics->{matchtype};
-    
-        print "$varpairindex\t$id1\t$id2\t$matchtype\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+        my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+        my $max_shift = $rh_distance_metrics->{'max_shift'};
+   
+        my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+        my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+        my $size_diff = $rh_distance_metrics->{'size_diff'};
+        my $size_avg = $rh_distance_metrics->{'size_avg'};
+        my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+
+        my $pos_diff = abs($pos2 - $pos1);
+        # divide maximum shift by the minimum absolute size of the two variants:
+        my $d1 = ($Opt{olddist}) ?
+                  abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), 
+                  abs((2*$size_avg + $size_diff)/2.0)) + 1) : abs($max_shift)/$shared_denominator;
+        # divide the size difference of the two indels by the average absolute size of the difference
+        my $d2 = ($Opt{olddist}) ? abs($size_diff)/(abs($size_avg) + 1) : abs($size_diff)/$shared_denominator;
+        # divide edit distance by the minimum alternate haplotype length:
+        my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0,
+                 (2*$altlength_avg + $altlength_diff)/2.0) + 1) : abs($edit_dist)/$shared_denominator;
+        print "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
     }
     else {
         print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";

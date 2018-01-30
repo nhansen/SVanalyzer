@@ -1,4 +1,11 @@
 .git/*
+Build
+MYMETA.*
+nucmer.error
+_build
+blib
+_build/*
+blib/*
 docs/_build/*
 docs/_static/*
 docs/_template/*

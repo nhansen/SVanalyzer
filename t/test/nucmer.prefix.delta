@@ -1,0 +1,44 @@
+/home/nhansen/projects/SVanalyzer/github/SVanalyzer/t/test/ref.fasta /home/nhansen/projects/SVanalyzer/github/SVanalyzer/t/test/alt.fasta
+NUCMER
+>ref alt 20001 20037
+1 10022 1 10023 1 1 0
+-10001
+0
+39 20001 39 20037 36 36 0
+-9964
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+-1
+0

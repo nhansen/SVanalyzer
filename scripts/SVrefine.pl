@@ -372,7 +372,7 @@ sub process_region {
                         next;
                     }
 
-                    if ($svsize > $Opt{maxsize}) {
+                    if (($Opt{maxsize}) && ($svsize > $Opt{maxsize})) {
                         print STDERR "REGION $regionstring MAXSIZE\n";
                         next;
                     }

@@ -129,7 +129,7 @@ for (my $i=0; $i<=$#nodes; $i++) {
 if ($Opt{'vcf'}) { # if user specified a VCF file, write out a "clustered" VCF file with only annotated representative variants
     my $vcf = $Opt{'vcf'};
     my $newvcf = $vcf;
-    $newvcf =~ s/\.vcf/.clustered.vcf/;
+    $newvcf =~ s/\.vcf/.clustered.$max_relshift.$max_relsizediff.$max_reldist.vcf/;
 
     if ($vcf eq $newvcf) {
         print STDERR "VCF file name passed with --vcf option must contain the string \".vcf\". Skipping VCF file creation.\n";

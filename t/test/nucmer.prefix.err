@@ -1,0 +1,15 @@
+1: PREPARING DATA
+2,3: RUNNING mummer AND CREATING CLUSTERS
+# reading input file "t/test/nucmer.prefix.ntref" of length 20002
+# construct suffix tree for sequence of length 20002
+# (maximum reference length is 2305843009213693948)
+# (maximum query length is 18446744073709551615)
+# CONSTRUCTIONTIME /home/nhansen/projects/MUMmer/MUMmer3.23/mummer t/test/nucmer.prefix.ntref 0.00
+# reading input file "/home/nhansen/projects/SVanalyzer/github/SVanalyzer/t/test/alt.fasta" of length 20037
+# matching query-file "/home/nhansen/projects/SVanalyzer/github/SVanalyzer/t/test/alt.fasta"
+# against subject-file "t/test/nucmer.prefix.ntref"
+# COMPLETETIME /home/nhansen/projects/MUMmer/MUMmer3.23/mummer t/test/nucmer.prefix.ntref 0.00
+# SPACE /home/nhansen/projects/MUMmer/MUMmer3.23/mummer t/test/nucmer.prefix.ntref 0.04
+4: FINISHING DATA
+5: GENERATING COORDS FILE
+WARNING: there was a problem deleting the temporary output files
