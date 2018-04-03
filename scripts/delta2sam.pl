@@ -40,7 +40,8 @@ my $delta_file = $Opt{delta};
 my $outsam = $Opt{out};
 my $sam_fh = Open($outsam, "w");
 
-my $delta_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file);
+my $delta_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file
+                                             -extend_exact => 1);
 
 # set up assembly FASTA objects:
 $ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);

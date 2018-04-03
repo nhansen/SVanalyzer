@@ -37,7 +37,8 @@ my $delta_file = $Opt{delta};
 my $outbed = $Opt{out};
 my $bed_fh = Open($outbed, "w");
 
-my $delta_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file);
+my $delta_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file,
+                                             -extend_exact => 1);
 write_header($bed_fh) if ($Opt{header});
 write_edgelets($delta_obj, $bed_fh);
 
