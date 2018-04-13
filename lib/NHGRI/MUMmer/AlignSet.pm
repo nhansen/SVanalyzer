@@ -80,6 +80,7 @@ sub new {
     my $query_hashref = $params{-query_hashref};
     my $reference_file = $params{-reference_file};
     my $query_file = $params{-query_file};
+    my $verbose = $params{-verbose};
 
     my $self = { delta_file => $delta_file,
                  ignore_unequal => $ignore_unequal,
@@ -90,6 +91,8 @@ sub new {
                  query_hashref => $query_hashref,
                  reference_file => $reference_file,
                  query_file => $query_file,
+                 verbose => $verbose,
+
                   };
 
     bless $self, $class;
@@ -400,7 +403,7 @@ sub _extend_exact {
         #print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n";
     }
 
-    if ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end) {
+    if ($self->{verbose} && ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end)) {
         print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
         print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
     }
