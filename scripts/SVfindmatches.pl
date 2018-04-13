@@ -7,6 +7,8 @@ use Getopt::Long;
 use Pod::Usage;
 use GTB::File qw(Open);
 
+use NHGRI::SVanalyzer::Comp;
+
 our %Opt;
 
 =head1 NAME
