@@ -22,7 +22,7 @@ SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assem
 
 =head1 SYNOPSIS
 
-  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage>
+  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --includeseqs
 
 For complete documentation, run C<SVrefine.pl -man>
 
@@ -810,6 +810,11 @@ the input BED file which had no spanning coverage in the query alignments. (Opti
 Specify the path to which to write a BED file containing the widened coordinates
 of structural variants. These are the same coordinates reported in the "WIDENEDREF"
 tag in the variant VCF. (Optional).
+
+=item B<--includeseqs>
+
+Write sequences from the reference FASTA file into the "REF" and "ALT" fields of
+the VCF.
 
 =item B<--help|--manual>
 
