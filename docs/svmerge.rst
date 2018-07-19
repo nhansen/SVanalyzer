@@ -1,8 +1,8 @@
 .. _svmerge:
 
-####################
-*svanalyzer merge*
-####################
+#####################
+**svanalyzer merge**
+#####################
 SVmerge groups structural variants from a VCF file by calculating a
 distance matrix, then finding connected components of a graph in 
 which the nodes are the variants, and edges exist when the distances
@@ -17,6 +17,7 @@ variants.
 Usage
 ===============
 ::
+
    svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
    svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant files>
 
