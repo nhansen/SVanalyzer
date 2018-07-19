@@ -1,10 +1,8 @@
 .. _svmerge:
 
 ===============
-Name
+**SVmerge**
 ===============
-
-**svanalyzer merge**
 
 SVmerge groups structural variants from a VCF file by calculating a
 distance matrix, then finding connected components of a graph in 
