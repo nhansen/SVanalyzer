@@ -12,11 +12,11 @@ SVanalyzer
    :caption: SVanalyzer Use Cases
    :name: mastertoc
 
-   benchmark
-   merge
-   comp
-   widen
-   refine
+   benchmark <svbenchmark>
+   merge <svmerge>
+   comp <svcomp>
+   widen <svwiden>
+   refine <svrefine>
 
 `SVanalyzer <http://github.com/nhansen/SVanalyzer>`_ is a software package for the 
 analysis of large insertions, deletions, and inversions in DNA. SVanalyzer tools
@@ -47,7 +47,7 @@ To install SVanalyzer to an alternate location (e.g., if you do not have root
 permissions), call "perl Build.PL --install_base $HOME".
 
 Command documentation
-=======
+======================
 
 *  :ref:`SVrefine       <svrefine>` - Call sequence-resolved structural variants (SVs) from assembly consensus
 *  :ref:`SVcomp         <svcomp>` - Compare sequence-resolved SVs to each other
