@@ -1,27 +1,29 @@
 .. _svbenchmark:
 
-NAME
+===============
+**SVbenchmark**
 ===============
 
-svanalyzer merge
+SVbenchmark compares a set of "test" structural variants in VCF format to a known
+truth set (also in VCF format) and outputs estimates of sensitivity and specificity.
 
-    SVmerge.pl - group structural variants from a VCF file by calculating a
-    distance matrix, then finding connected components of a graph.
+===============
+Usage
+===============
+::
 
-SYNOPSIS
-      SVmerge.pl --ref <reference FASTA file> --vcf <variant file>
+   svanalyzer benchmark --ref <reference FASTA file> --test <VCF-formatted file of variants to test> --truth <VCF-formatted file of true variants>
 
-DESCRIPTION
-    The program steps through a VCF file, calculating distances to other
-    variants in the file that are nearby by comparing alternate haplotypes. It
-    then reports cluters of variants, and prints a VCF file of unique
-    variants.
+===============
+Options
+===============
 
-    The VCF file must be sorted by position within each chromosome.
-
-OPTIONS
-    --help|--manual
-        Display documentation. One "--help" gives a brief synopsis, "-h -h"
-        shows all options, "--manual" provides complete documentation.
-
+==========================     =======================================================================================================
+ Option                          Description
+==========================     =======================================================================================================
+**--help|--manual**               Display documentation.
+**--ref**                         The reference FASTA file for the supplied VCF file or files.
+**--test**                        A VCF-formatted file of structural variants to test.
+**--truth**                       A VCF-formatted file of variants to compare against.
+==========================     =======================================================================================================
 
