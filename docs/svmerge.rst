@@ -1,32 +1,31 @@
 .. _svmerge:
 
-NAME
+####################
+*svanalyzer merge*
+####################
+SVmerge groups structural variants from a VCF file by calculating a
+distance matrix, then finding connected components of a graph in 
+which the nodes are the variants, and edges exist when the distances
+are below the specified maximum values.
+
+The program steps through a set of structural variants, calculating distances to other
+nearby variants by comparing their alternate haplotypes. The program
+then reports cluters of variants, and prints a VCF file of "unique"
+variants.
+
 ===============
-
-svanalyzer merge
-
-    group structural variants from a VCF file by calculating a
-    distance matrix, then finding connected components of a graph.
-
-SYNOPSIS
+Usage
 ===============
+::
+   svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
+   svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant files>
 
-      svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
-      svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant files>
-
-DESCRIPTION
-===============
-
-    The program steps through a set of structural variants, calculating distances to other
-    nearby variants by comparing their alternate haplotypes. The program
-    then reports cluters of variants, and prints a VCF file of "unique"
-    variants.
-
-OPTIONS
-===============
-
-    --help|--manual
-        Display documentation. One "--help" gives a brief synopsis, "-h -h"
-        shows all options, "--manual" provides complete documentation.
-
+==========================     =======================================================================================================
+ Option                          Description
+==========================     =======================================================================================================
+**--help|--manual**               Display documentation.
+**--ref**                         The reference FASTA file for the supplied VCF file or files.
+**--variants**                    A VCF-formatted file of (possibly equivalent) variants to merge.
+**--fof**                         A file of paths to VCF-formatted files to merge.
+==========================     =======================================================================================================
 
