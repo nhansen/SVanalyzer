@@ -48,9 +48,10 @@ permissions), call "perl Build.PL --install_base $HOME".
 Command documentation
 ======================
 
-*  :ref:`SVrefine       <svrefine>` - Call sequence-resolved structural variants (SVs) from assembly consensus
-*  :ref:`SVcomp         <svcomp>` - Compare sequence-resolved SVs to each other
+*  :ref:`SVbenchmark    <svbenchmark>` - Compare a set of "test" structural variants in VCF format to a known truth set and report sensitivity and specificity
 *  :ref:`SVmerge        <svmerge>` - Merge similar sequence-resolved SVs in VCF format
+*  :ref:`SVcomp         <svcomp>` - Compare sequence-resolved SVs to each other
 *  :ref:`SVwiden        <svwiden>` - Add tags to a VCF file of sequence-resolved SVs detailing surrounding repetitive genomic context
+*  :ref:`SVrefine       <svrefine>` - Call sequence-resolved structural variants (SVs) from assembly consensus
 
 
