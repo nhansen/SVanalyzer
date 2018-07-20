@@ -14,17 +14,15 @@ nearby variants by comparing their alternate haplotypes. The program
 then reports cluters of variants, and prints a VCF file of "unique"
 variants.
 
-===============
 Usage
-===============
+------------
 ::
 
    svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
    svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant files>
 
-===============
 Options
-===============
+------------
 
 ==========================     =======================================================================================================
  Option                          Description

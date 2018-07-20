@@ -1,27 +1,27 @@
 .. _svcomp:
 
-SVcomp
+===============
+**SVcomp**
 ===============
 
-NAME
-    SVcomp.pl - calculate "distances" between structural variants in VCF
-    format by constructing their alternate haplotypes and comparing them.
+SVcomp calculates "distances" between pairs of structural variants in VCF
+format by constructing their alternate haplotypes and aligning them to each other.
 
-SYNOPSIS
-      SVcomp.pl --ref reference.fasta first_vcf.vcf second_vcf.vcf
+Usage
+------------
+::
 
-DESCRIPTION
-    The program steps through two VCF files, processing pairs of variants that
-    are on the same numbered, non-comment line in each file. For each pair of
-    lines, the program reports whether the variants result in haplotypes that
-    are alignable with discrepancy rates within specified ranges.
+   svanalyzer comp --ref reference.fasta --first first_vcf.vcf --second second_vcf.vcf
 
-    Note that the VCF files don't need to be sorted, and in fact, depending on
-    the exact variants being compared, it's possible that they shouldn't be
-    sorted.
+Options
+------------
 
-OPTIONS
-    --help|--manual
-        Display documentation. One "--help" gives a brief synopsis, "-h -h"
-        shows all options, "--manual" provides complete documentation.
+==========================     =======================================================================================================
+ Option                          Description
+==========================     =======================================================================================================
+**--help|--manual**               Display documentation.
+**--ref**                         The reference FASTA file for the supplied VCF file or files.
+**--first**                       A VCF-formatted file of variants to compare
+**--second**                      Second VCF-formatted file of variants to compare--must have the same number of variants as the first file
+==========================     =======================================================================================================
 

@@ -1,72 +1,35 @@
 .. _svrefine:
 
-SVrefine
+===============
+**SVrefine**
 ===============
 
-NAME
-    SVrefine.pl - Read a delta-formatted file with MUMmer alignments of an
-    assembly to the reference to call structural variants (or refine variants
-    in chosen genomic regions) and print them out in VCF format.
+SVrefine reads a delta-formatted file of MUMmer alignments of an assembly
+to the reference to call structural variants (or refine variants in chosen
+genomic regions) and print them out in VCF format.
 
-SYNOPSIS
+Usage
+------------
+::
+
       SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to output BED file of SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage>
 
-    For complete documentation, run "SVrefine.pl -man"
+Options
+------------
 
-OPTIONS
-    --delta <path to delta file>
-        Specify a delta file produced by MUMmer with the alignments to be used
-        for retrieving SV sequence information. Generally, one would use the
-        same filtered delta file that was used to create the "diff" file (see
-        below). (Required).
-
-    --regions <path to a BED file of regions>
-        Specify a BED file of regions to be investigated for structural
-        variants in the assembly (i.e., the query fasta file). (Optional).
-
-    --ref_fasta <path to reference multi-fasta file>
-        Specify the path to a multi-fasta file containing the sequences used
-        as reference in the MUMmer alignment. (Optional: If not specified,
-        the script will use the reference path obtained by parsing the delta
-        file's first line).
-
-    --query_fasta <path to query multi-fasta file>
-        Specify the path to a multi-fasta file containing the sequences used
-        as the query in the MUMmer alignment. (Optional: If not specified,
-        the script uses the query path obtained by parsing the delta file's
-        first line).
-
-    --outvcf <path to which to write a new VCF-formatted file>
-        Specify the path to which to write a new VCF file containing the
-        structural variants discovered in this comparison. BEWARE: if this
-        file already exists, it will be overwritten!
-
-    --refname <string to include as the reference name in the VCF header>
-        Specify a string to be written as the reference name in the
-        ##reference line of the VCF header.
-
-    --samplename <string to include as the sample name in the "CHROM" line>
-        Specify a string to be written as the sample name in the header
-        specifying a genotype column in the VCF line beginning with "CHROM".
-
-    --maxsize <maximum size of SV to report>
-        Specify an integer for the maximum size of SV to report.
-
-    --noheader
-        Flag option to suppress printout of the VCF header.
-
-    --nocov <path to write a BED file with "no coverage" regions>
-        Specify the path to which to write a BED file containing the regions
-        of the input BED file which had no spanning coverage in the query
-        alignments.
-
-    --svregions <path to write a BED file with widened SV regions>
-        Specify the path to which to write a BED file containing the widened
-        coordinates of structural variants. These are the same coordinates
-        reported in the "WIDENEDREF" tag in the variant VCF.
-
-    --help|--manual
-        Display documentation. One "--help" gives a brief synopsis, "-h -h"
-        shows all options, "--manual" provides complete documentation.
-
+==========================     =======================================================================================================
+ Option                          Description
+==========================     =======================================================================================================
+**--help|--manual**               Display documentation.
+**--delta**                       Path to a delta file produced by MUMmer with alignments to be used for retrieving SVs.
+**--regions**                     Path to a BED file of regions to be investigated for structural variants in the assembly (Optional).
+**--ref_fasta**                   Path to a multi-fasta file containing the sequences used as a reference in the MUMmer alignment (Optional).
+**--query_fasta**                 Path to a multi-fasta file containing the sequences used as a query in the MUMmer alignment (Optional).
+**--outvcf**                      Path to which to write a new VCF-formatted file of structural variants.
+**--refname**                     String to include as the reference name in the VCF header.
+**--samplename**                  String to include as the sample name in the output VCF file.
+**--maxsize**                     Specify an integer for the maximum size of SV to report.
+**--noheader**                    Flag option to suppress printout of the VCF header.
+**--nocov**                       Path to write a BED file with "no coverage" regions (only used when --regions option is specified).
+==========================     =======================================================================================================
 

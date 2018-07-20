@@ -7,16 +7,14 @@
 SVwiden reads a VCF file and uses MUMmer to determine widened
 coordinates for structural variants, adding custom tags to the VCF record.
 
-===============
 Usage
-===============
+------------
 ::
 
    svanalyzer widen --ref <reference FASTA file> --variants <VCF-formatted variant file>
 
-===============
 Options
-===============
+------------
 
 ==========================     =======================================================================================================
  Option                          Description

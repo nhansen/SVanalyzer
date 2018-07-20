@@ -12,11 +12,11 @@ SVanalyzer
    :caption: SVanalyzer Use Cases
    :name: mastertoc
 
-   benchmark <svbenchmark>
-   merge <svmerge>
-   comp <svcomp>
-   widen <svwiden>
-   refine <svrefine>
+   SVbenchmark <svbenchmark>
+   SVmerge <svmerge>
+   SVcomp <svcomp>
+   SVwiden <svwiden>
+   SVrefine <svrefine>
 
 `SVanalyzer <http://github.com/nhansen/SVanalyzer>`_ is a software package for the 
 analysis of large insertions, deletions, and inversions in DNA. SVanalyzer tools
