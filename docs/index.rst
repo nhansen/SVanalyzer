@@ -9,7 +9,6 @@ SVanalyzer
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: SVanalyzer Use Cases
    :name: mastertoc
 
    SVbenchmark <svbenchmark>
