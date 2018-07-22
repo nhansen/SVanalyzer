@@ -6,12 +6,12 @@
 
 SVmerge groups structural variants from a VCF file by calculating a
 distance matrix, then finding connected components of a graph in 
-which the nodes are the variants, and edges exist when the distances
+which the nodes are the variants and edges exist when the distances
 are below the specified maximum values.
 
 The program steps through a set of structural variants, calculating distances to other
 nearby variants by comparing their alternate haplotypes. The program
-then reports cluters of variants, and prints a VCF file of "unique"
+then reports clusters of variants, and prints a VCF file of "unique"
 variants.
 
 Usage
