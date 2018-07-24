@@ -1,4 +1,4 @@
-#!/usr/local/gtb/vendor/perlbrew/perls/perl-5.22.1/bin/perl -w
+#!/usr/bin/perl -w
 # $Id:$
 
 use strict;
@@ -12,17 +12,19 @@ our %Opt;
 
 =head1 NAME
 
-SVmerge.pl - group structural variants from a VCF file by calculating a distance matrix, then finding connected components of a graph.
+svanalyzer merge - group structural variants from one or more VCF files by calculating a distance matrix between nearby variants, then finding connected components of a graph.
 
 =head1 SYNOPSIS
 
-  SVmerge.pl --ref <reference FASTA file> --vcf <variant file>
+  svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
+  svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant file>
+  svanalyzer merge --ref <reference FASTA file> --distance_file <distance file produced by previous run> --variants <VCF-formatted variant file>
 
 =head1 DESCRIPTION
 
-The program steps through a VCF file, calculating distances to other variants in the file that are nearby by comparing alternate haplotypes. It then reports cluters of variants, and prints a VCF file of unique variants.
-
-The VCF file must be sorted by position within each chromosome.
+The program steps through the specified VCF files, calculating distances to other variants in the files that are nearby by comparing alternate haplotypes. It then reports clusters of variants, and prints a VCF file of unique variants. Alternatively, a file of previously-calculated distances can be provided
+with the --distance_file option, and the clustering can be skipped with the option
+--skip_clusters.
 
 =cut
 
@@ -37,79 +39,30 @@ process_commandline();
 my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
 
 my $ref_fasta = $Opt{ref};
-my $vcf_file = $Opt{vcf};
+my $vcf_file = $Opt{variants};
+my $fof_file = $Opt{fof};
+my $prefix = $Opt{prefix};
+my $vcf_output = $prefix.".clustered.vcf";
+my $dist_output = $prefix.".distances";
+my $dist_input = $Opt{distance_file};
+
+# Threshold options:
 my $max_distance = $Opt{max_dist};
+my $max_relshift = $Opt{relshift};
+my $max_relsizediff = $Opt{relsizediff};
+my $max_reldist = $Opt{reldist};
 
-my $vcf_fh = Open($vcf_file);
-
-my ($current_chrom, $current_lastpos); # to check for sorting
-my $total_svs = 0;
-my @current_neighborhood_svs = ();
-print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
-
-while (<$vcf_fh>) {
-    next if (/^#/);
-
-    my $vcf_line = $_;
-    my ($chrom, $pos, $end, $id, $ref, $alt, $reflength, $altlength) = parse_vcf_line($vcf_line);
-
-    next if (!$chrom);
-
-    # check sorted:
-    check_sort(\$current_chrom, \$current_lastpos, $chrom, $pos);
-
-    $total_svs++;
-
-    my %current_sv = ( chrom => $chrom, pos => $pos, end => $end, id => $id, ref => $ref, alt => $alt, 
-                       reflength => $reflength, altlength => $altlength, size => $altlength - $reflength );
-    if (!@current_neighborhood_svs) {
-        push @current_neighborhood_svs, { %current_sv };
-        next;
-    }
-    else { # compare current SV to all SV's in the neighborhood
-
-        # remove different chromosome or distant SVs:
-        while (@current_neighborhood_svs && ($current_neighborhood_svs[0]->{chrom} ne $chrom || $current_neighborhood_svs[0]->{pos} < $pos - $max_distance)) {
-            shift @current_neighborhood_svs;
-        }
-
-        # if chance of match, compare alternate alleles with edlib:
-        for (my $i=0; $i<=$#current_neighborhood_svs; $i++) {
-            my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
-            my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
-                                                        -sv1_info => $rh_neighborhood_sv,
-                                                        -sv2_info => {%current_sv},
-                                                        -workdir => $workingdir);
-            if ($comp_obj->potential_match()) {
-                my $rh_distance_metrics = $comp_obj->calc_distance();
-                my $edit_dist = $rh_distance_metrics->{'edit_distance'};
-                my $max_shift = $rh_distance_metrics->{'max_shift'};
-                my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
-                my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
-                my $size_diff = $rh_distance_metrics->{'size_diff'};
-                my $size_avg = $rh_distance_metrics->{'size_avg'};
-                my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
-
-                my $pos_diff = abs($rh_neighborhood_sv->{pos} - $current_sv{pos});
-                # divide maximum shift by the minimum absolute size of the two variants:
-                my $d1 = ($Opt{olddist}) ? abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), abs((2*$size_avg + $size_diff)/2.0)) + 1) :
-                           abs($max_shift)/$shared_denominator;
-                # divide the size difference of the two indels by the average absolute size of the difference
-                my $d2 = ($Opt{olddist}) ? abs($size_diff)/(abs($size_avg) + 1) : abs($size_diff)/$shared_denominator;
-                # divide edit distance by the minimum alternate haplotype length:
-                my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0, (2*$altlength_avg + $altlength_diff)/2.0) + 1) :
-                           abs($edit_dist)/$shared_denominator;
-                print "DIST\t$rh_neighborhood_sv->{id}\t$id\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
-            }
-        }
-
-        push @current_neighborhood_svs, { %current_sv };
-    }
+my ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges); # distances between connected nodes
+if ($dist_input) { # distances were calculated previously
+   ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = read_distances($dist_input);
+}
+else {
+   ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = calc_distances($vcf_file, $fof_file);
 }
 
-close $vcf_fh;
+my $rh_cluster_info = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
 
-print "Read $total_svs SVs from file $vcf_file\n";
+write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info);
 
 #------------
 # End MAIN
@@ -117,8 +70,8 @@ print "Read $total_svs SVs from file $vcf_file\n";
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50, max_dist => 100000 );
-    GetOptions(\%Opt, qw( ref=s vcf=s check_length check_ref workdir=s max_dist=i olddist nocleanup manual help+ version)) || pod2usage(0);
+    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'test' , relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f nocleanup prefix=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge.pl, ", q$Revision:$, "\n"; }
@@ -127,23 +80,213 @@ sub process_commandline {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
     }
 
-    if (!$Opt{ref} || !$Opt{vcf}) {
+    if (!$Opt{ref} || (!$Opt{variants} && !$Opt{fof})) {
         pod2usage();
     }
 }
 
-sub minimum {
-    my $a = shift;
-    my $b = shift;
+sub open_files_and_sort {
+    my $vcf_file = shift;
+    my $vcf_fof = shift;
 
-    return ($a < $b) ? $a : $b;
+    my @vcf_files = (($vcf_file) && (-r $vcf_file)) ? ($vcf_file) : ();
+    if ($vcf_fof) {
+        my $fof_fh = Open("$vcf_fof");
+        while (<$fof_fh>) {
+            next if (/^#/); # skip comment lines
+            if (/^(\S+)/) {
+                my $this_file = $1;
+                if (-r $this_file) {
+                    push @vcf_files, $this_file;
+                }
+            }
+        }
+        close $fof_fh;
+    }
+
+    if (!@vcf_files) {
+        die "No valid VCF files specified in input!\n";
+    }
+
+    my @commands = ();
+    foreach my $vcf_file (@vcf_files) {
+        my $this_command = ($vcf_file =~ /gz$/) ? "gunzip -c $vcf_file" : "cat $vcf_file";
+        push @commands, $this_command;
+    }
+    my $commandpipe = join ';', @commands;
+    $commandpipe = "(".$commandpipe.") | grep -v '#' | sort -k1,1 -k2,2n |";
+    my $variant_fh = Open($commandpipe);
+
+    return $variant_fh;
 }
 
-sub parse_vcf_line {
-    my $vcf_line = shift;
+sub read_distances {
+    my $distance_file = shift;
+    my $dist_fh = Open($distance_file);
 
-    if ($vcf_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
-        my ($chr, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
+    my @nodes = ();
+    my @node_edges = (); # array of node connections
+    my %node_index = (); # indices of nodes
+    my %distances = (); # hash of distance arrays for pairs of ids
+    
+    while (<$dist_fh>) {
+        chomp;
+        s/^DIST\s//; # some versions of distance file have "DIST\t" at beginning of each line
+        my $line = $_;
+        my @fields = split /\t/, $line; # first two fields must be ids, last four dist measures
+        my $id1 = $fields[0];
+        my $id2 = $fields[1];
+        my $posdiff = $fields[$#fields-3];
+        my $relshift = $fields[$#fields-2];
+        my $relsizediff = $fields[$#fields-1];
+        my $reldist = $fields[$#fields];
+        next if ($id1 eq 'ID1');
+        next if ($id1 =~ /Read \d+ SVs/);
+        #next if (!$id1);
+    
+        if (!(defined($posdiff)) || ($posdiff !~ /(\d+)/)) {
+            print STDERR "Skipping line--not enough fields:\n$line\n";
+            next;
+        }
+
+        if ($posdiff <= $max_distance && $relshift <= $max_relshift &&
+            $relsizediff <= $max_relsizediff && $reldist <= $max_reldist) {
+            my $index1 = $node_index{$id1};
+            if (!(defined($index1))) {
+                push @nodes, $id1;
+                $index1 = $#nodes + 1;
+                $node_index{$id1} = $index1;
+            }
+            my $index2 = $node_index{$id2};
+            if (!(defined($index2))) {
+                push @nodes, $id2;
+                $index2 = $#nodes + 1;
+                $node_index{$id2} = $index2;
+            }
+            push @{$node_edges[$index1 - 1]}, $index2 - 1;
+            push @{$node_edges[$index2 - 1]}, $index1 - 1;
+        }
+        my $idlesser = (($id1 cmp $id2) > 0) ? $id2 : $id1;
+        my $idgreater = (($id1 cmp $id2) > 0) ? $id1 : $id2;
+        $distances{"$idlesser:$idgreater"} = [$posdiff, $relshift, $relsizediff, $reldist];
+    }
+
+    close $dist_fh;
+
+    return ({%distances}, [@nodes], {%node_index}, [@node_edges]);
+}
+
+sub calc_distances {
+
+    my $vcf_file = shift;
+    my $fof_file = shift;
+
+    my $rh_current_last_sv; # to check for sorting
+    my $total_svs = 0;
+    my @current_neighborhood_svs = ();
+
+    my @nodes = ();
+    my @node_edges = ();
+    
+    my $dist_fh = Open($dist_output, "w");
+    print $dist_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+    
+    my $sortedvcf_fh = open_files_and_sort($vcf_file, $fof_file);
+    my %distances = (); # hash of distance arrays for pairs of ids
+    my %node_index = (); # indices of nodes
+    while (my $rh_sv = retrieve_next_sorted_sv($sortedvcf_fh)) {
+    
+        next if (!($rh_sv->{chrom}));
+    
+        # check sorted:
+        check_sort($rh_current_last_sv, $rh_sv);
+        $rh_current_last_sv = $rh_sv;
+    
+        $total_svs++;
+    
+        if (!@current_neighborhood_svs) {
+            push @current_neighborhood_svs, $rh_sv;
+            next;
+        }
+        else { # compare current SV to all SV's in the neighborhood
+    
+            # remove different chromosome or distant SVs:
+            while (@current_neighborhood_svs && ($current_neighborhood_svs[0]->{chrom} ne $rh_sv->{chrom} || $current_neighborhood_svs[0]->{pos} < $rh_sv->{pos} - $max_distance)) {
+                shift @current_neighborhood_svs;
+            }
+    
+            # if chance of match, compare alternate alleles with edlib:
+            for (my $i=0; $i<=$#current_neighborhood_svs; $i++) {
+                my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
+                my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
+                                                            -sv1_info => $rh_neighborhood_sv,
+                                                            -sv2_info => $rh_sv,
+                                                            -workdir => $workingdir);
+                if ($comp_obj->potential_match()) {
+                    my $rh_distance_metrics = $comp_obj->calc_distance();
+                    my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+                    my $max_shift = $rh_distance_metrics->{'max_shift'};
+                    my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+                    my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+                    my $size_diff = $rh_distance_metrics->{'size_diff'};
+                    my $size_avg = $rh_distance_metrics->{'size_avg'};
+                    my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+    
+                    my $pos_diff = abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos});
+                    # divide maximum shift by the minimum absolute size of the two variants:
+                    my $d1 = abs($max_shift)/$shared_denominator;
+                    # divide the size difference of the two indels by the average absolute size of the difference
+                    my $d2 = abs($size_diff)/$shared_denominator;
+                    # divide edit distance by the minimum alternate haplotype length:
+                    my $d3 = abs($edit_dist)/$shared_denominator;
+                    my $id1 = $rh_neighborhood_sv->{id};
+                    my $id2 = $rh_sv->{id};
+                    print $dist_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
+                    if ($pos_diff <= $max_distance && $d1 <= $max_relshift &&
+                        $d2 <= $max_relsizediff && $d3 <= $max_reldist) {
+                        my $index1 = $node_index{$id1};
+                        if (!(defined($index1))) {
+                            push @nodes, $id1;
+                            $index1 = $#nodes + 1;
+                            $node_index{$id1} = $index1;
+                        }
+                        my $index2 = $node_index{$id2};
+                        if (!(defined($index2))) {
+                            push @nodes, $id2;
+                            $index2 = $#nodes + 1;
+                            $node_index{$id2} = $index2;
+                        }
+                        push @{$node_edges[$index1 - 1]}, $index2 - 1;
+                        push @{$node_edges[$index2 - 1]}, $index1 - 1;
+                    }
+                    my $idlesser = (($id1 cmp $id2) > 0) ? 
+                                     $id1 : $id2;
+                    my $idgreater = (($id1 cmp $id2) > 0) ? 
+                                     $id2 : $id1;
+                    $distances{"$idlesser:$idgreater"} = [$pos_diff, $d1, $d2, $d3];
+                }
+            }
+    
+            # add this SV to the current neighborhood:
+            push @current_neighborhood_svs, $rh_sv;
+        }
+    }
+
+    close $sortedvcf_fh;
+    close $dist_fh;
+    
+    print "Read $total_svs SVs from file $vcf_file\n";
+
+    return ({%distances}, [@nodes], {%node_index}, [@node_edges]);
+}
+
+sub retrieve_next_sorted_sv {
+    my $variant_fh = shift;
+
+    my $next_line = <$variant_fh>;
+    chomp $next_line;
+    if ($next_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
+        my ($chrom, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
         $ref = uc($ref);
         $alt = uc($alt);
  
@@ -155,32 +298,249 @@ sub parse_vcf_line {
             $end = $start + $reflength - 1;
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
-            return;
+            return {};
         }
         else { # check for END= INFO tag
-            warn "Skipping non-ATGC ref or alt:$vcf_line";
-            return;
+            warn "Skipping non-ATGC ref or alt:$next_line";
+            return {};
         }
 
-        return ($chr, $start, $end, $id, $ref, $alt, $reflength, $altlength);
+        return {'chrom' => $chrom, 'pos' => $start, 'start' => $start, 'end' => $end, 'id' => $id, 'ref' => $ref,
+                'alt' => $alt, 'reflength' => $reflength, 'altlength' => $altlength};
     }
     else {
-        die "Unexpected VCF line:\n$vcf_line";
+        die "Unexpected VCF line:\n$next_line";
     }
 }
 
-sub check_sort {
-    my $rs_lastchrom = shift;
-    my $rs_lastpos = shift;
-    my $chrom = shift;
-    my $pos = shift;
+sub find_clusters {
+    my $rh_distances = shift;
+    my $ra_nodes = shift;
+    my $rh_nodes = shift;
+    my $ra_node_edges = shift;
 
-    if (($$rs_lastchrom) && ($chrom eq $$rs_lastchrom) && ($pos < $$rs_lastpos)) {
-        die "VCF file is not sorted ($chrom, $$rs_lastpos, $pos)\n";
+    my @visited = ();
+    my @nodes = @{$ra_nodes};
+    for (my $i=0; $i<=$#nodes; $i++) {
+        $visited[$i] = 0;
+    }
+    
+    my %cluster_info = ();
+    for (my $i=0; $i<=$#nodes; $i++) {
+        next if ($visited[$i]);
+        my @connectednodes = dfs($i, $ra_node_edges, \@visited);
+        my @nodenames = map { $nodes[$_] } @connectednodes;
+        my $nodestring = join ':', @nodenames;
+        print "Found node cluster $nodestring\n";
+        my ($clustercall, $no_cluster_calls, $dummynodestring, $no_exact_matches, $exactsubcluster, $maxdist1, $maxdist2, $maxdist3) =
+                     analyze_cluster($nodestring, $rh_distances);
+        print "$nodestring\t$clustercall\t$no_cluster_calls\t$nodestring\t$no_exact_matches\t$exactsubcluster\t$maxdist1\t$maxdist2\t$maxdist3\n";
+        $cluster_info{$clustercall} = {'nodestring' => $nodestring, 'exactstring' => $exactsubcluster, 'maxdists' => [$maxdist1, $maxdist2, $maxdist3]};
+    }
+   
+    return {%cluster_info}; 
+}
+
+sub write_cluster_vcf {
+    my $vcf_file = shift;
+    my $fof_file = shift;
+    my $vcf_output = shift;
+    my $rh_cluster_info = shift;
+
+    my $vcf_fh = Open($vcf_file, $fof_file);
+    my $newvcf_fh = Open($vcf_output, "w");
+
+    my $ra_allowed_info_fields = [];
+    while (<$vcf_fh>) {
+        if (/^##/) {
+            print $newvcf_fh $_; # include original VCF header in new file
+
+            if (/^##INFO=<ID=([^,]+)/) {
+                push @{$ra_allowed_info_fields}, $1;
+            }
+        }
+        elsif (/^#CHROM/) { # include new INFO lines
+            my $chromline = $_;
+            print_info_lines($newvcf_fh);
+            print $newvcf_fh $chromline; # include original VCF header in new file
+        }
+        else {
+            chomp;
+            my @fields = split /\t/, $_;
+            my $id_field = $fields[2];
+
+            if ($rh_cluster_info->{$id_field}) { # this is a cluster rep!
+                write_vcf_line_with_info($newvcf_fh, \@fields, $rh_cluster_info->{$id_field}, $ra_allowed_info_fields);
+            }
+        }
     }
 
-    $$rs_lastchrom = $chrom;
-    $$rs_lastpos = $pos;
+}
+
+sub dfs {
+    my $i = shift;
+    my $ra_nodeedges = shift;
+    my $ra_visited = shift;
+
+    my @stack = ();
+    push @stack, $i;
+
+    my @connectednodes = ();
+    while (@stack) {
+        my $j = pop @stack;
+        if (!$ra_visited->[$j]) {
+            $ra_visited->[$j] = 1;
+            push @connectednodes, $j;
+            foreach my $k (@{$ra_nodeedges->[$j]}) {
+                next if ($ra_visited->[$k]);
+                push @stack, $k;
+            }
+        }
+    }
+
+    return @connectednodes;
+}
+
+sub analyze_cluster {
+    my $nodestring = shift;
+    my $rh_dists = shift;
+
+    my @nodes = split /:/, $nodestring;
+    my $no_cluster_calls = @nodes;
+
+    if ($no_cluster_calls == 1) {
+        return ($nodestring, 1, $nodestring, 1, $nodestring, 0, 0, 0);
+    }
+
+    # at least two calls--analyze exact subclusters
+    my ($maxdist1, $maxdist2, $maxdist3) = (0, 0, 0);
+    my @exact_clusters = @nodes;
+    my %node_cluster = map { $exact_clusters[$_] => $_ } ( 0 .. $#nodes ); # all start out in their own cluster
+    for (my $i=0; $i<=$#nodes; $i++) {
+        for (my $j=$i + 1; $j<=$#nodes; $j++) {
+            my $idlesser = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$j] : $nodes[$i];
+            my $idgreater = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$i] : $nodes[$j];
+            if (!$rh_dists->{"$idlesser:$idgreater"}) {
+                #print STDERR "Missing distance information for $idlesser:$idgreater!\n";
+                next;
+            }
+            my ($thisposdist, $this_dist1, $this_dist2, $this_dist3) = @{$rh_dists->{"$idlesser:$idgreater"}};
+            $maxdist1 = ($this_dist1 > $maxdist1) ? $this_dist1 : $maxdist1;
+            $maxdist2 = ($this_dist2 > $maxdist2) ? $this_dist2 : $maxdist2;
+            $maxdist3 = ($this_dist3 > $maxdist3) ? $this_dist3 : $maxdist3;
+            if (!$this_dist1 && !$this_dist2 && !$this_dist3) { # exact match--merge exact clusters
+                if ($node_cluster{$idlesser} != $node_cluster{$idgreater}) { # different clusters merge greater into lesser
+                    #print "Merging $idgreater ($node_cluster{$idgreater}) into $idlesser ($node_cluster{$idlesser})!\n";
+                    if (!($exact_clusters[$node_cluster{$idgreater}])) {
+                        print "Empty node cluster for $idgreater being merged into $idlesser!\n";
+                    }
+                    my $old_cluster_index = $node_cluster{$idgreater};
+                    my $new_cluster_index = $node_cluster{$idlesser};
+                    $exact_clusters[$new_cluster_index] .= ":".$exact_clusters[$old_cluster_index];
+                    $exact_clusters[$old_cluster_index] = '';
+                    foreach my $key (keys %node_cluster) {
+                        if ($node_cluster{$key} == $old_cluster_index) {
+                            $node_cluster{$key} = $new_cluster_index;
+                        }
+                    }
+                }
+                else {
+                    #print "$idgreater and $idlesser are already in the same exact cluster!\n";
+                } 
+            }
+
+        }
+    }
+
+    my @unique_clusters = grep { $_ ne '' } @exact_clusters;
+    my @largest_exact_clusters = ();
+    my $max_exact_clustersize = 0;
+
+    foreach my $unique_cluster (@unique_clusters) {
+        print "UNIQUE $unique_cluster\n";
+        my @unique_vars = split /:/, $unique_cluster;
+        my $no_vars = @unique_vars;
+        if ($no_vars == $max_exact_clustersize) { # it's a tie
+            push @largest_exact_clusters, $unique_cluster;
+            $max_exact_clustersize = $no_vars;
+        }
+        elsif ($no_vars > $max_exact_clustersize) { # replace
+            @largest_exact_clusters = ($unique_cluster);
+            $max_exact_clustersize = $no_vars;
+        }
+    }
+
+    my $exactsubcluster = $largest_exact_clusters[rand()*$#largest_exact_clusters];
+    my @exact_vars = split /:/, $exactsubcluster;
+    my $clustercall = $exact_vars[rand()*$#exact_vars];
+
+    return ($clustercall, $no_cluster_calls, $nodestring, $max_exact_clustersize, $exactsubcluster, $maxdist1, $maxdist2, $maxdist3);
+}
+
+sub write_vcf_line_with_info {
+    my $vcf_fh = shift;
+    my $ra_vcf_fields = shift;
+    my $rh_cluster_info = shift;
+    my $ra_allowed_info_fields = shift;
+
+    my $clustersvcalls = $rh_cluster_info->{'nodestring'};
+    my @clustercalls = split /:/, $clustersvcalls;
+    my $no_clustersvcalls = @clustercalls;
+    my $exactsvcalls = $rh_cluster_info->{'exactstring'};
+    my @exactcalls = split /:/, $exactsvcalls;
+    my $no_exactsvcalls = @exactcalls;
+    my $ra_maxdists = $rh_cluster_info->{'maxdists'};
+
+    my $info_field = $ra_vcf_fields->[7];
+    my @info_entries = ($info_field eq '.') ? () : split /;/, $info_field;
+    my @allowed_info_entries = ();
+    foreach my $info_entry (@info_entries) {
+        my $info_id = $info_entry;
+        $info_id =~ s/=.*$//;
+        if (grep {$_ eq $info_id} @{$ra_allowed_info_fields}) {
+            push @allowed_info_entries, $info_entry;
+        }
+    }
+    @info_entries = @allowed_info_entries;
+
+    my ($maxshiftdist, $maxsizediff, $maxeditdist) = @{$ra_maxdists};
+
+    push @info_entries, "ClusterIDs=$clustersvcalls";
+    push @info_entries, "NumClusterSVs=$no_clustersvcalls";
+    push @info_entries, "ExactMatchIDs=$exactsvcalls";
+    push @info_entries, "NumExactMatchSVs=$no_exactsvcalls";
+    push @info_entries, "ClusterMaxShiftDist=$maxshiftdist";
+    push @info_entries, "ClusterMaxSizeDiff=$maxsizediff";
+    push @info_entries, "ClusterMaxEditDist=$maxeditdist";
+
+    $ra_vcf_fields->[7] = join ';', @info_entries;
+    $ra_vcf_fields->[8] = '.'; # no format/genotype for now
+    $ra_vcf_fields->[9] = '.'; # no format/genotype for now
+
+    my $vcf_record = join "\t", @{$ra_vcf_fields};
+
+    print $vcf_fh "$vcf_record\n";
+}
+
+sub print_info_lines {
+    my $fh = shift;
+    # print lots of INFO lines
+    print $fh "##INFO=<ID=ClusterIDs,Number=1,Type=String,Description=\"IDs of SVs that cluster with this SV\">\n";
+    print $fh "##INFO=<ID=NumClusterSVs,Number=1,Type=Integer,Description=\"Total number of SVs in this cluster\">\n";
+    print $fh "##INFO=<ID=ExactMatchIDs,Number=1,Type=String,Description=\"IDs of SVs that are exactly the same call as this SV\">\n";
+    print $fh "##INFO=<ID=NumExactMatchSVs,Number=1,Type=Integer,Description=\"Total number of SVs in this exact cluster\">\n";
+    print $fh "##INFO=<ID=ClusterMaxShiftDist,Number=1,Type=Float,Description=\"Maximum relative shift distance between two SVs in this cluster\">\n";
+    print $fh "##INFO=<ID=ClusterMaxSizeDiff,Number=1,Type=Float,Description=\"Maximum relative size difference between two SVs in this cluster\">\n";
+    print $fh "##INFO=<ID=ClusterMaxEditDist,Number=1,Type=Float,Description=\"Maximum relative edit distance between two SVs in this cluster\">\n";
+}
+
+sub check_sort {
+    my $rh_last_sv = shift;
+    my $rh_this_sv = shift;
+
+    if (($rh_last_sv->{chrom}) && ($rh_this_sv->{chrom}) && ($rh_last_sv->{chrom} eq $rh_this_sv->{chrom}) && ($rh_last_sv->{pos}) && ($rh_this_sv->{pos}) && ($rh_last_sv->{pos} > $rh_this_sv->{pos})) {
+        die "VCF file is not sorted ($rh_last_sv->{chrom}, $rh_last_sv->{pos}, $rh_this_sv->{pos}\n";
+    }
 }
 
 __END__
@@ -193,6 +553,18 @@ __END__
 
 Display documentation.  One C<--help> gives a brief synopsis, C<-h -h> shows
 all options, C<--manual> provides complete documentation.
+
+=item B<--prefix>
+
+Specify a prefix to be used to create output file names: files of distance metric values will be named "prefix.distances" and the output, clustered VCF file will be named "prefix.clustered.vcf".
+
+=item B<--variants>
+
+Specify the path to a VCF file of variants to merge. These variants will be considered in combination with any specified using the --fof option.
+
+=item B<--fof>
+
+Specify the path to a file of files with paths to VCF files of variants to merge. These variants will be considered in combination with any specified using the --variants option.
 
 =back
 
@@ -218,6 +590,6 @@ merchantability or fitness for any particular purpose.
 
 In any work or product derived from this material, proper attribution of the
 authors as the source of the software or data should be made, using "NHGRI
-Genome Technology Branch" as the citation. 
+Cancer Genetics and Comparative Genomics Branch" as the citation. 
 
 =cut
