@@ -85,8 +85,8 @@ sub process_commandline {
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVwiden.pl, ", q$Revision:$, "\n"; }
 
-    if (!($Opt{invcf})) {
-        print STDERR "Must specify a VCF file path of variants to widen with --invcf option!\n"; 
+    if (!($Opt{variants})) {
+        print STDERR "Must specify a VCF file path of variants to widen with --variants option!\n"; 
         pod2usage(0);
     }
 
