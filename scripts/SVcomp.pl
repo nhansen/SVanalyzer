@@ -71,11 +71,13 @@ sub process_commandline {
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVcomp.pl, ", q$Revision:$, "\n"; }
-    # If non-option arguments are required, uncomment next line
-    pod2usage("SVcomp.pl --ref first_vcf.vcf second_vcf.vcf") if !@ARGV;
 
     if ($Opt{workdir} ne '.') {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
+    }
+
+    if (!$Opt{ref} || (!$Opt{first} && !$Opt{second})) {
+        pod2usage();
     }
 }
 
@@ -85,7 +87,7 @@ sub compare_vcf_files {
     my $dist_fh = shift;
 
     my $varpairindex = 1;
-    print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+    print $dist_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
     while (<$vcf1_fh>) {
         next if (/^#/);
     
@@ -105,7 +107,7 @@ sub compare_vcf_files {
         my $altlength2 = length($alt2);
     
         if ($chr1 ne $chr2) {
-            print "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            print $dist_fh "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
             $varpairindex++;
             next;
         }
@@ -140,10 +142,10 @@ sub compare_vcf_files {
             # divide edit distance by the minimum alternate haplotype length:
             my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0,
                      (2*$altlength_avg + $altlength_diff)/2.0) + 1) : abs($edit_dist)/$shared_denominator;
-            print "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
+            print $dist_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
         }
         else {
-            print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            print $dist_fh "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
         }
         $varpairindex++;
     }
@@ -156,7 +158,6 @@ sub parse_vcf_line {
         my ($chr, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
         $ref = uc($ref);
         $alt = uc($alt);
-        #print "REF: $ref, alt $alt\n";
 
         my $end; # if we have sequence, end will be determined as last base of REF, otherwise, from END=
         if (($ref =~ /^([ATGC]+)$/) && ($alt =~ /^([ATGC]+)$/)) {
@@ -175,7 +176,6 @@ sub parse_vcf_line {
             die "Length of reference allele does not match provided POS, END!  Use --ignore_length option to ignore this discrepancy.\n";
         }
 
-        #print "Parsed $chr:$start-$end ($id, $ref, $alt)\n";
         return ($chr, $start, $end, $id, $ref, $alt);
     }
     else {
