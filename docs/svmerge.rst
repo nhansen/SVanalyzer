@@ -14,6 +14,10 @@ nearby variants by comparing their alternate haplotypes. The program
 then reports clusters of variants, and prints a VCF file of "unique"
 variants.
 
+Alternatively, a file of previously-calculated distances can be provided
+with the --distance_file option, and the clustering can be skipped with the option
+--skip_clusters.
+
 Usage
 ------------
 ::
