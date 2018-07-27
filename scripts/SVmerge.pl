@@ -34,6 +34,14 @@ with the --distance_file option, and the clustering can be skipped with the opti
 
 $|=1;
 
+my $edlib = `which edlib-aligner`;
+if (!$edlib) {
+    die "Running SVmerge requires that the edlib aligner (http://martinsosic.com/edlib/) executable be in your Linux path.\n";
+}
+else {
+    chomp $edlib;
+}
+
 process_commandline();
 
 my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
