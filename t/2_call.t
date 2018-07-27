@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 6;
+plan tests => 8;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -42,11 +42,26 @@ SKIP: {
     $script = 'blib/script/SVwiden.pl';
     
     mkdir "t/test";
-    system("perl -w -I lib $script --invcf t/widen.vcf --outvcf t/widened.vcf --ref t/hs37d5_1start.fa --workdir t/test > t/test2.out 2>&1");
+    system("perl -w -I lib $script --variants t/widen.vcf --prefix t/widened --ref t/hs37d5_1start.fa --workdir t/test > t/test2.out 2>&1");
     $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
     like $out, qr/REPTYPE=DUP/, "$script vartype";
     $out = `awk -F"\t" '\$2==842057 {print \$8}' t/widened.vcf`;
     like $out, qr/REFWIDENED=1:842056-842090/, "$script widensmall";
     #system("rm t/widened.vcf");
     #system("rm t/test2.out");
+}
+
+SKIP: {
+    # Test SVmerge:
+    ($has_samtools && $has_edlib) or skip "Skipping SVmerge tests because one of samtools or edlib-aligner is missing from path", 2;
+    $script = 'blib/script/SVmerge.pl';
+    
+    mkdir "t/test";
+    system("perl -w -I lib $script --variants t/merge.vcf --outvcf t/merged.vcf --ref t/hs37d5_1start.fa --workdir t/test > t/test3.out 2>&1");
+    $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
+    like $out, qr/REPTYPE=DUP/, "$script vartype";
+    $out = `awk -F"\t" '\$2==842057 {print \$8}' t/widened.vcf`;
+    like $out, qr/REFWIDENED=1:842056-842090/, "$script widensmall";
+    #system("rm t/merged.vcf");
+    #system("rm t/test3.out");
 }

@@ -5,15 +5,16 @@ use strict;
 use Test::More;
 use Module::Build;
 
-my @scripts = qw(blib/script/SVrefine.pl blib/script/SVcomp.pl blib/script/SVwiden.pl);
-my @modules = qw();
+# Four scripts to test at this point:
+my @scripts = qw(blib/script/SVrefine.pl blib/script/SVcomp.pl blib/script/SVwiden.pl blib/script/SVmerge.pl);
+my @modules = qw(blib/lib/GTB/FASTA.pm blib/lib/GTB/File.pm blib/lib/NHGRI/MUMmer/AlignSet.pm blib/lib/NHGRI/SVanalyzer/Comp.pm blib/lib/NISC/Sequencing/Date.pm );
 
 # Direct useless output to STDERR, to avoid confusing Test::Harness
 my $stdin = select STDERR;
 # Restore STDOUT as default filehandle
 select $stdin;
 
-plan tests => scalar(@scripts) * 2;
+plan tests => scalar(@modules) * 2 + scalar(@scripts) * 2;
 
 my $out;
 for my $script (@scripts) {
@@ -23,5 +24,14 @@ for my $script (@scripts) {
     $out = `podchecker $script 2>&1`;
     print $out;
     like $out, qr/pod syntax OK|does not contain any pod/, "$script POD";
+}
+
+for my $mod (@modules) {
+    $out = `perl -I lib -cw $mod 2>&1`;
+    print $out;
+    like $out, qr/syntax OK/, "$mod syntax";
+    $out = `podchecker $mod 2>&1`;
+    print $out;
+    like $out, qr/pod syntax OK/, "$mod POD";
 }
 
