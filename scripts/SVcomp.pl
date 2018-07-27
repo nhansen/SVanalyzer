@@ -1,23 +1,22 @@
-#!/usr/local/gtb/vendor/perlbrew/perls/perl-5.22.1/bin/perl -w
-# $Id: SVcomp.pl 7772 2017-03-06 20:25:29Z nhansen $
+#!/usr/bin/perl -w
+# $Id:$
 
 use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use GTB::File qw(Open);
-use NHGRI::MUMmer::AlignSet;
 use NHGRI::SVanalyzer::Comp;
 
 our %Opt;
 
 =head1 NAME
 
-SVcomp.pl - calculate "distances" between structural variants in VCF format by constructing their alternate haplotypes and comparing them.
+svanalyzer comp - calculate "distances" between corresponding structural variants in two VCF-formatted files by constructing their alternate haplotypes and comparing them.
 
 =head1 SYNOPSIS
 
-  SVcomp.pl --ref reference.fasta first_vcf.vcf second_vcf.vcf
+  svanalyzer comp --ref <reference FASTA file> --first <first VCF-formatted file> --second <second VCF-formatted file>
 
 =head1 DESCRIPTION
 
@@ -35,7 +34,7 @@ $|=1;
 
 my $edlib = `which edlib-aligner`;
 if (!$edlib) {
-    die "Running SVcomp requires that the edlib aligner (http://martinsosic.com/edlib/) be in your Linux path.\n";
+    die "Running SVcomp requires that the edlib aligner (http://martinsosic.com/edlib/) executable be in your Linux path.\n";
 }
 else {
     chomp $edlib;
@@ -43,78 +42,20 @@ else {
 
 process_commandline();
 
-my $vcf_file1 = $ARGV[0];
-my $vcf_file2 = $ARGV[1];
+my $vcf_file1 = $Opt{'first'};
+my $vcf_file2 = $Opt{'second'};
 
 my $workingdir = $Opt{workdir};
 my $ref_fasta = $Opt{ref};
 
+my $prefix = $Opt{prefix};
+my $dist_output = $prefix.".distances";
+my $dist_fh = Open($dist_output, "w");
+
 my $vcf1_fh = Open($vcf_file1);
 my $vcf2_fh = Open($vcf_file2);
 
-my $varpairindex = 1;
-print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
-while (<$vcf1_fh>) {
-    next if (/^#/);
-
-    my $vcf1_line = $_;
-    my ($chr1, $pos1, $end1, $id1, $ref1, $alt1) = parse_vcf_line($vcf1_line);
-
-    my $vcf2_line = <$vcf2_fh>;
-    while ($vcf2_line =~ /^#/) {
-        $vcf2_line = <$vcf2_fh>;
-    }
-
-    my ($chr2, $pos2, $end2, $id2, $ref2, $alt2) = parse_vcf_line($vcf2_line);
-
-    my $reflength1 = length($ref1);
-    my $reflength2 = length($ref2);
-    my $altlength1 = length($alt1);
-    my $altlength2 = length($alt2);
-
-    if ($chr1 ne $chr2) {
-        print "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-        $varpairindex++;
-        next;
-    }
-
-    my $size1 = $reflength1 - $altlength1;
-    my $size2 = $reflength2 - $altlength2;
- 
-    my $rh_sv1 = { chrom => $chr1, pos => $pos1, end => $end1, id => $id1, ref => $ref1, alt => $alt1};
-    my $rh_sv2 = { chrom => $chr2, pos => $pos2, end => $end2, id => $id2, ref => $ref2, alt => $alt2};
-
-    my $comp_obj = NHGRI::SVanalyzer::Comp->new(-sv1_info => $rh_sv1, -sv2_info => $rh_sv2, -ref_fasta => $ref_fasta);
-    my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
-
-    if ($comp_obj->potential_match()) {
-        my $rh_distance_metrics = $comp_obj->calc_distance(); 
-        my $edit_dist = $rh_distance_metrics->{'edit_distance'};
-        my $max_shift = $rh_distance_metrics->{'max_shift'};
-   
-        my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
-        my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
-        my $size_diff = $rh_distance_metrics->{'size_diff'};
-        my $size_avg = $rh_distance_metrics->{'size_avg'};
-        my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
-
-        my $pos_diff = abs($pos2 - $pos1);
-        # divide maximum shift by the minimum absolute size of the two variants:
-        my $d1 = ($Opt{olddist}) ?
-                  abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), 
-                  abs((2*$size_avg + $size_diff)/2.0)) + 1) : abs($max_shift)/$shared_denominator;
-        # divide the size difference of the two indels by the average absolute size of the difference
-        my $d2 = ($Opt{olddist}) ? abs($size_diff)/(abs($size_avg) + 1) : abs($size_diff)/$shared_denominator;
-        # divide edit distance by the minimum alternate haplotype length:
-        my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0,
-                 (2*$altlength_avg + $altlength_diff)/2.0) + 1) : abs($edit_dist)/$shared_denominator;
-        print "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
-    }
-    else {
-        print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
-    }
-    $varpairindex++;
-}
+compare_vcf_files($vcf1_fh, $vcf2_fh, $dist_fh);
 
 close $vcf1_fh;
 close $vcf2_fh;
@@ -135,6 +76,76 @@ sub process_commandline {
 
     if ($Opt{workdir} ne '.') {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
+    }
+}
+
+sub compare_vcf_files {
+    my $vcf1_fh = shift;
+    my $vcf2_fh = shift;
+    my $dist_fh = shift;
+
+    my $varpairindex = 1;
+    print "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+    while (<$vcf1_fh>) {
+        next if (/^#/);
+    
+        my $vcf1_line = $_;
+        my ($chr1, $pos1, $end1, $id1, $ref1, $alt1) = parse_vcf_line($vcf1_line);
+    
+        my $vcf2_line = <$vcf2_fh>;
+        while ($vcf2_line =~ /^#/) {
+            $vcf2_line = <$vcf2_fh>;
+        }
+    
+        my ($chr2, $pos2, $end2, $id2, $ref2, $alt2) = parse_vcf_line($vcf2_line);
+    
+        my $reflength1 = length($ref1);
+        my $reflength2 = length($ref2);
+        my $altlength1 = length($alt1);
+        my $altlength2 = length($alt2);
+    
+        if ($chr1 ne $chr2) {
+            print "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            $varpairindex++;
+            next;
+        }
+    
+        my $size1 = $reflength1 - $altlength1;
+        my $size2 = $reflength2 - $altlength2;
+     
+        my $rh_sv1 = { chrom => $chr1, pos => $pos1, end => $end1, id => $id1, ref => $ref1, alt => $alt1};
+        my $rh_sv2 = { chrom => $chr2, pos => $pos2, end => $end2, id => $id2, ref => $ref2, alt => $alt2};
+    
+        my $comp_obj = NHGRI::SVanalyzer::Comp->new(-sv1_info => $rh_sv1, -sv2_info => $rh_sv2, -ref_fasta => $ref_fasta);
+        my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
+    
+        if ($comp_obj->potential_match()) {
+            my $rh_distance_metrics = $comp_obj->calc_distance(); 
+            my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+            my $max_shift = $rh_distance_metrics->{'max_shift'};
+       
+            my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+            my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+            my $size_diff = $rh_distance_metrics->{'size_diff'};
+            my $size_avg = $rh_distance_metrics->{'size_avg'};
+            my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+    
+            my $pos_diff = abs($pos2 - $pos1);
+            # divide maximum shift by the minimum absolute size of the two variants:
+            my $d1 = ($Opt{olddist}) ?
+                      abs($max_shift)/(minimum(abs((2*$size_avg - $size_diff)/2.0), 
+                      abs((2*$size_avg + $size_diff)/2.0)) + 1) : abs($max_shift)/$shared_denominator;
+            # divide the size difference of the two indels by the average absolute size of the difference
+            my $d2 = ($Opt{olddist}) ? abs($size_diff)/(abs($size_avg) + 1) : abs($size_diff)/$shared_denominator;
+            # divide edit distance by the minimum alternate haplotype length:
+            my $d3 = ($Opt{olddist}) ? abs($edit_dist)/(minimum((2*$altlength_avg - $altlength_diff)/2.0,
+                     (2*$altlength_avg + $altlength_diff)/2.0) + 1) : abs($edit_dist)/$shared_denominator;
+            print "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
+        }
+        else {
+            print "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+        }
+        $varpairindex++;
     }
 }
 
