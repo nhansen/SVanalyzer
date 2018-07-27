@@ -78,7 +78,7 @@ write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info);
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'test' , relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'merged' , relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
     GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f nocleanup prefix=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }

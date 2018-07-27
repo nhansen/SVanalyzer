@@ -57,7 +57,7 @@ SKIP: {
     $script = 'blib/script/SVmerge.pl';
     
     mkdir "t/test";
-    system("perl -w -I lib $script --variants t/merge.vcf --outvcf t/merged.vcf --ref t/hs37d5_1start.fa --workdir t/test > t/test3.out 2>&1");
+    system("perl -w -I lib $script --variants t/merge.vcf --prefix t/merged --ref t/hs37d5_1start.fa --workdir t/test > t/test3.out 2>&1");
     $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
     like $out, qr/REPTYPE=DUP/, "$script vartype";
     $out = `awk -F"\t" '\$2==842057 {print \$8}' t/widened.vcf`;
