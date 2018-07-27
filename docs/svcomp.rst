@@ -11,7 +11,7 @@ Usage
 ------------
 ::
 
-   svanalyzer comp --ref reference.fasta --first first_vcf.vcf --second second_vcf.vcf
+   svanalyzer comp --ref reference.fasta --first <first VCF-formatted file> --second <second VCF-formatted file>
 
 Options
 ------------
