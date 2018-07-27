@@ -28,7 +28,7 @@ structural variants, adding custom tags to the VCF record.
 
 =head1 SYNOPSIS
 
-  SVwiden.pl --invcf <path to input VCF file> --ref <path to reference multi-FASTA file> --outvcf <path to output VCF file>
+  SVwiden.pl --variants <path to input VCF file> --ref <path to reference multi-FASTA file> --outvcf <path to output VCF file>
 
 For complete documentation, run C<SVwiden.pl -man>
 
@@ -53,7 +53,7 @@ process_commandline();
 my $ref_fasta = $Opt{ref};
 my $ref_db = GTB::FASTA->new($ref_fasta);
 
-my $invcf = $Opt{invcf};
+my $invcf = $Opt{variants};
 my $invcf_fh = Open($invcf, "r");
 
 my $outvcf = $Opt{outvcf};
@@ -80,7 +80,7 @@ close $outvcf_fh;
 sub process_commandline {
     # Set defaults here
     %Opt = ( buffer => 10000, workdir => '.' );
-    GetOptions(\%Opt, qw( invcf=s ref=s outvcf=s buffer=i noheader workdir=s manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( variants=s ref=s outvcf=s buffer=i noheader workdir=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVwiden.pl, ", q$Revision:$, "\n"; }
@@ -218,6 +218,7 @@ sub process_variant {
     if (@{$ra_entry_pairs} == 1) { # as expected
         my $ra_aligns = $ra_entry_pairs->[0]->{aligns};
         my ($left_align, $right_align, $end2end_align);
+        my @center_aligns = (); # aligns which do not stretch to reference ends
         foreach my $rh_align (@{$ra_aligns}) {
             my $ref_entry = $rh_align->{ref_entry};
             my $query_entry = $rh_align->{query_entry};
@@ -225,6 +226,7 @@ sub process_variant {
             my $ref_end = $rh_align->{ref_end};
             my $query_start = $rh_align->{query_start};
             my $query_end = $rh_align->{query_end};
+            #print STDERR "$ref_start\t$query_start\t$ref_end\t$query_end\n";
             if ($ref_start == 1 && $ref_end == length($ref_allele)) {
                 $end2end_align = $rh_align;
             }
@@ -234,8 +236,9 @@ sub process_variant {
             elsif ($ref_end == length($ref_allele)) {
                 $right_align = $rh_align;
             }
-  
-            #print STDERR "ALIGN\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n";
+            else {
+                push @center_aligns, $rh_align;
+            }
         }
         my @end_aligns = ();
         if ($end2end_align) {
@@ -252,12 +255,50 @@ sub process_variant {
                                   -left_align => $end_aligns[0], 
                                   -right_align => $end_aligns[1]
                                );
+            print STDERR "$end_aligns[0]->{ref_start}\t$end_aligns[0]->{query_start}\t$end_aligns[0]->{ref_end}\t$end_aligns[0]->{query_end}\n";
+            print STDERR "$end_aligns[1]->{ref_start}\t$end_aligns[1]->{query_start}\t$end_aligns[1]->{ref_end}\t$end_aligns[1]->{query_end}\n";
+            my $comp = $end_aligns[0]->{comp};
             my $svsize = length($alt) - length($ref);
-            if ($svsize < 0) {
-                $align2sv_obj->widen_deletion(); 
+            my @cross_center_aligns; # these alignments help determine repeat unit
+            if ($svsize < 0) { #DELETION
+                $align2sv_obj->widen_deletion();
+                my $query1 = $align2sv_obj->{query1};
+                my $query2 = $align2sv_obj->{query2};
+                my $ref1p = $align2sv_obj->{ref1p};
+                my $ref2p = $align2sv_obj->{ref2p};
+                print STDERR "QUERY LIMITS $query2-$query1\n";
+                print STDERR "REF LIMITS $ref2p-$ref1p\n";
+                @cross_center_aligns = ($comp) ?
+                    #### NEED TO CHECK THESE ####
+                    grep {(!($_->{ref_start} > $ref1p || $_->{ref_end} < $ref2p)) &&
+                          (!($_->{query_start} < $query1 || $_->{query_end} > $query2))}
+                                          @center_aligns :
+                    grep {(!($_->{ref_start} > $ref1p || $_->{ref_end} < $ref2p)) &&
+                          (!($_->{query_start} > $query1 || $_->{query_end} < $query2))}
+                                          @center_aligns;
             }
-            else {
+            else { #INSERTION
                 $align2sv_obj->widen_insertion();
+                my $query1p = $align2sv_obj->{query1p};
+                my $query2p = $align2sv_obj->{query2p};
+                my $ref1 = $align2sv_obj->{ref1};
+                my $ref2 = $align2sv_obj->{ref2};
+                print STDERR "QUERY LIMITS $query2p-$query1p\n";
+                print STDERR "REF LIMITS $ref2-$ref1\n";
+                @cross_center_aligns = ($comp) ?
+                     grep {!($_->{query_start} > $query2p || $_->{query_end} < $query1p) &&
+                           !($_->{ref_end} < $ref2 || $_->{ref_start} > $ref1) }
+                                   @center_aligns :
+                     grep {(!($_->{query_end} < $query2p || $_->{query_start} > $query1p)) &&
+                           (!($_->{ref_end} < $ref2 || $_->{ref_start} > $ref1)) }
+                                   @center_aligns;
+            }
+            foreach my $rh_align (@cross_center_aligns) {
+                my $ref_start = $rh_align->{ref_start};
+                my $ref_end = $rh_align->{ref_end};
+                my $query_start = $rh_align->{query_start};
+                my $query_end = $rh_align->{query_end};
+                print STDERR "$ref_start\t$query_start\t$ref_end\t$query_end\n";
             }
             $simlength = $align2sv_obj->{repeat_bases};
             $reptype = $align2sv_obj->{type};
@@ -266,7 +307,8 @@ sub process_variant {
             my $ref1p = ($align2sv_obj->{ref1p}) ? $align2sv_obj->{ref1p} + $left_end - 1 : undef;
             my $ref2p = ($align2sv_obj->{ref2p}) ? $align2sv_obj->{ref2p} + $left_end - 1 : undef;
             $refwidened = ($svsize > 0) ? "$chrom:$ref2-$ref1" : "$chrom:$ref2p-$ref1p";
-            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $svsize REFWIDENED $refwidened\n";
+            my $no_center_aligns = @cross_center_aligns;
+            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $svsize REFWIDENED $refwidened NOCENTERALIGNS $no_center_aligns\n";
         }
         elsif (@end_aligns > 2) {
             print STDERR "Complex alignments!\n";
@@ -298,7 +340,7 @@ sub process_variant {
             $simlength = ($new_rfs - $new_lfe) - ($rfs - $pmo);
             $reptype = ($orig_svsize < 0) ? (($simlength >= -1*$orig_svsize) ? 'CONTRAC' : 'SIMPLEDEL') :
                                             (($simlength >= -1*$orig_svsize) ? 'DUP' : 'SIMPLEINS');
-            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $orig_svsize REFWIDENED: $refwidened\n";
+            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $orig_svsize REFWIDENED: $refwidened (SMALL)\n";
         }
     }
     else {
@@ -362,7 +404,7 @@ sub run_mummer {
     my $mummer_cmd_file = "$workingdir/run_mummer.$nucmer_name.sh";
     my $mummer_fh = Open("$mummer_cmd_file", "w");
     print $mummer_fh "#!/bin/bash\nnucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
-    print $mummer_fh "delta-filter -q $workingdir/nucmer.$nucmer_name.delta > $workingdir/nucmer.$nucmer_name.qdelta\n";
+    #print $mummer_fh "delta-filter -q $workingdir/nucmer.$nucmer_name.delta > $workingdir/nucmer.$nucmer_name.qdelta\n";
     close $mummer_fh;
     chmod 0755, $mummer_cmd_file;
     
@@ -379,7 +421,8 @@ sub run_mummer {
         unlink "$workingdir/run_mummer.$nucmer_name.sh";
     }
 
-    return "$workingdir/nucmer.$nucmer_name.qdelta";
+    #return "$workingdir/nucmer.$nucmer_name.qdelta";
+    return "$workingdir/nucmer.$nucmer_name.delta";
 }
 
 __END__
