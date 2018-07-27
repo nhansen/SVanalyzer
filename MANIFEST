@@ -1,6 +1,5 @@
 Build.PL
 MANIFEST			This list of files
-scripts/clusterVCF.pl
 scripts/mummer2vcf_SVs.pl
 scripts/SVcomp.pl
 scripts/SVwiden.pl
@@ -8,7 +7,6 @@ scripts/delta2bed.pl
 scripts/SVbackgenotype.pl
 scripts/SVmerge.pl
 scripts/delta2sam.pl
-scripts/SVcluster.pl
 scripts/SVrefine.pl
 lib/GTB/FASTA.pm
 lib/GTB/File.pm
