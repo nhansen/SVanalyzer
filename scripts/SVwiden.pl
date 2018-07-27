@@ -28,7 +28,7 @@ structural variants, adding custom tags to the VCF record.
 
 =head1 SYNOPSIS
 
-  SVwiden.pl --variants <path to input VCF file> --ref <path to reference multi-FASTA file> --outvcf <path to output VCF file>
+  SVwiden.pl --variants <path to input VCF file> --ref <path to reference multi-FASTA file> --prefix <path prefix to name output VCF file>
 
 For complete documentation, run C<SVwiden.pl -man>
 
@@ -56,7 +56,7 @@ my $ref_db = GTB::FASTA->new($ref_fasta);
 my $invcf = $Opt{variants};
 my $invcf_fh = Open($invcf, "r");
 
-my $outvcf = $Opt{outvcf};
+my $outvcf = $Opt{prefix}.".vcf";
 my $outvcf_fh = Open($outvcf, "w");
 
 write_header($invcf_fh, $outvcf_fh) if (!$Opt{noheader});
@@ -79,19 +79,14 @@ close $outvcf_fh;
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( buffer => 10000, workdir => '.' );
-    GetOptions(\%Opt, qw( variants=s ref=s outvcf=s buffer=i noheader workdir=s manual help+ version)) || pod2usage(0);
+    %Opt = ( buffer => 10000, workdir => '.', prefix => 'widened' );
+    GetOptions(\%Opt, qw( variants=s ref=s prefix=s buffer=i noheader workdir=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVwiden.pl, ", q$Revision:$, "\n"; }
 
     if (!($Opt{invcf})) {
         print STDERR "Must specify a VCF file path of variants to widen with --invcf option!\n"; 
-        pod2usage(0);
-    }
-
-    if (!($Opt{outvcf})) {
-        print STDERR "Must specify a VCF file path to output variants with custom widened tags with --outvcf option!\n"; 
         pod2usage(0);
     }
 
@@ -436,11 +431,11 @@ __END__
 Specify the path to the multi-fasta file that serves as a reference
 for the structural variants in the VCF file.
 
-=item B<--outvcf <path to which to write a new VCF-formatted file>>
+=item B<--prefix <path/prefix to which to write a new VCF-formatted file>>
 
-Specify the path to which to write a new VCF file containing the structural
+Specify a prefix for the path to which to write a new VCF file containing the structural
 variants from the input VCF file, but now with tags specifying widened
-coordinates
+coordinates. (Default "./widened").
 
 =item B<--refname <string to include as the reference name in the VCF header>>
 
