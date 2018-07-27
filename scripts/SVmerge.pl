@@ -292,6 +292,10 @@ sub retrieve_next_sorted_sv {
     my $variant_fh = shift;
 
     my $next_line = <$variant_fh>;
+
+    if (!$next_line) {
+        return $next_line;
+    }
     chomp $next_line;
     if ($next_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
         my ($chrom, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
@@ -355,11 +359,11 @@ sub write_cluster_vcf {
     my $vcf_output = shift;
     my $rh_cluster_info = shift;
 
-    my $vcf_fh = Open($vcf_file, $fof_file);
+    my $sortedvcf_fh = open_files_and_sort($vcf_file, $fof_file);
     my $newvcf_fh = Open($vcf_output, "w");
 
     my $ra_allowed_info_fields = [];
-    while (<$vcf_fh>) {
+    while (<$sortedvcf_fh>) {
         if (/^##/) {
             print $newvcf_fh $_; # include original VCF header in new file
 
@@ -382,7 +386,7 @@ sub write_cluster_vcf {
             }
         }
     }
-
+    close $sortedvcf_fh;
 }
 
 sub dfs {
