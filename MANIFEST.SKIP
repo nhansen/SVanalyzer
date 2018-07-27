@@ -2,5 +2,8 @@ META.yml
 MYMETA.json
 MYMETA.yml
 t/testout
+t/test*.out
+t/merged.vcf
+t/widened.vcf
 _build
 ^Build$
