@@ -59,6 +59,7 @@ compare_vcf_files($vcf1_fh, $vcf2_fh, $dist_fh);
 
 close $vcf1_fh;
 close $vcf2_fh;
+close $dist_fh;
 
 #------------
 # End MAIN
@@ -67,7 +68,7 @@ close $vcf2_fh;
 sub process_commandline {
     # Set defaults here
     %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50 );
-    GetOptions(\%Opt, qw( ref=s ignore_length check_ref workdir=s cleanup manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s first=s second=s prefix=s ignore_length check_ref workdir=s cleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVcomp.pl, ", q$Revision:$, "\n"; }
@@ -107,7 +108,7 @@ sub compare_vcf_files {
         my $altlength2 = length($alt2);
     
         if ($chr1 ne $chr2) {
-            print $dist_fh "$varpairindex\t$id1\t$id2\tDIFFCHROM\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            print STDERR "DIFFCHROMS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
             $varpairindex++;
             next;
         }
@@ -145,7 +146,7 @@ sub compare_vcf_files {
             print $dist_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
         }
         else {
-            print $dist_fh "$varpairindex\t$id1\t$id2\tDIFFLENGTHS\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            print STDERR "DIFFLENGTHS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
         }
         $varpairindex++;
     }
