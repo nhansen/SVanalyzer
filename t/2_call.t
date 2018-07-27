@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 8;
+plan tests => 9;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -63,5 +63,19 @@ SKIP: {
     $out = `awk -F"\t" '\$2=="HG2_Ill_GATKHC_1" \&\& \$3=="HG3_Ill_GATKHC_2" {print \$6}' t/merged.distances`;
     ok($out == -34, "$script widensmall");
     #system("rm t/merged.vcf");
+    #system("rm t/merged.distances");
     #system("rm t/test3.out");
+}
+
+SKIP: {
+    # Test SVcomp:
+    ($has_samtools && $has_edlib) or skip "Skipping SVcomp tests because one of samtools or edlib-aligner is missing from path", 2;
+    $script = 'blib/script/SVcomp.pl';
+    
+    mkdir "t/test";
+    system("perl -w -I lib $script --first t/first.vcf --second t/second.vcf --prefix t/comp --ref t/hs37d5_1start.fa --workdir t/test > t/test4.out 2>&1");
+    $out = `awk -F"\t" '\$2=="HG4_Ill_svaba_1" \&\& \$3=="HG3_Ill_GATKHC_1" {print \$6}' t/comp.distances`;
+    ok($out == -37, "$script compsize");
+    #system("rm t/comp.distances");
+    #system("rm t/test4.out");
 }
