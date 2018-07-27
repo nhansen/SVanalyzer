@@ -58,10 +58,10 @@ SKIP: {
     
     mkdir "t/test";
     system("perl -w -I lib $script --variants t/merge.vcf --prefix t/merged --ref t/hs37d5_1start.fa --workdir t/test > t/test3.out 2>&1");
-    $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
-    like $out, qr/REPTYPE=DUP/, "$script vartype";
-    $out = `awk -F"\t" '\$2==842057 {print \$8}' t/widened.vcf`;
-    like $out, qr/REFWIDENED=1:842056-842090/, "$script widensmall";
+    $out = `awk -F"\t" '\$2==66442 {print \$8}' t/merged.clustered.vcf`;
+    like $out, qr/NumExactMatchSVs=1/, "$script exactcluster";
+    $out = `awk -F"\t" '\$2=="HG2_Ill_GATKHC_1" \&\& \$3=="HG3_Ill_GATKHC_2" {print \$6}' t/merged.distances`;
+    ok($out == -34, "$script widensmall");
     #system("rm t/merged.vcf");
     #system("rm t/test3.out");
 }
