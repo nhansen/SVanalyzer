@@ -67,7 +67,7 @@ close $dist_fh;
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50 );
+    %Opt = ( workdir => '.', match_percent => 90, shift_percent => 50, prefix => "svcomp" );
     GetOptions(\%Opt, qw( ref=s first=s second=s prefix=s ignore_length check_ref workdir=s cleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
@@ -77,7 +77,7 @@ sub process_commandline {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
     }
 
-    if (!$Opt{ref} || (!$Opt{first} && !$Opt{second})) {
+    if (!$Opt{ref} || !$Opt{first} || !$Opt{second}) {
         pod2usage();
     }
 }
