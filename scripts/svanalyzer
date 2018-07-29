@@ -1,0 +1,18 @@
+#!/bin/bash
+
+export TOOL=$1
+shift
+
+if [[ $TOOL = "merge" ]]; then
+    SVmerge $*;
+elif [[ $TOOL = "comp" ]]; then
+    SVcomp $*;
+elif [[ $TOOL = "widen" ]]; then
+    SVwiden $*;
+elif [[ $TOOL = "refine" ]]; then
+    SVrefine $*;
+elif [[ $TOOL = "benchmark" ]]; then
+    SVbenchmark $*;
+else
+    echo "There is no svanalyzer tool called "$TOOL". See the documentation at http://svanalyzer.readthedocs.io.";
+fi
