@@ -18,13 +18,13 @@ our %Opt;
 
 =head1 NAME
 
-SVrefine.pl - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants in those regions and print them out in VCF format.
+SVrefine - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants in those regions and print them out in VCF format.
 
 =head1 SYNOPSIS
 
-  SVrefine.pl --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --includeseqs
+  SVrefine --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --includeseqs
 
-For complete documentation, run C<SVrefine.pl -man>
+For complete documentation, run C<SVrefine -man>
 
 =cut
 
@@ -107,7 +107,7 @@ sub process_commandline {
                           includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
-    if ($Opt{version}) { die "SVrefine.pl, ", q$Revision: 7771 $, "\n"; }
+    if ($Opt{version}) { die "SVrefine, ", q$Revision: 7771 $, "\n"; }
 
     if (!($Opt{delta})) {
         print STDERR "Must specify a delta file path with --delta option!\n"; 
@@ -211,7 +211,7 @@ sub write_header {
     my $day = $date_obj->day();
     $day =~ s/^(\d)$/0$1/;
     print $fh "##fileDate=$year$month$day\n";
-    print $fh "##source=SVrefine.pl\n";
+    print $fh "##source=SVrefine\n";
     print $fh "##reference=$Opt{refname}\n" if ($Opt{refname});
     print $fh "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End coordinate of SV\">\n";
     print $fh "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of SV:DEL=Deletion, INS=Insertion, INV=Inversion\">\n";

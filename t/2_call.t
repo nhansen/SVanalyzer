@@ -19,7 +19,7 @@ plan tests => 9;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
-my $script = 'blib/script/SVrefine.pl';
+my $script = 'blib/script/SVrefine';
 
 SKIP: {
     ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 3;
@@ -39,7 +39,7 @@ SKIP: {
 SKIP: {
     # Test SVwiden:
     ($has_samtools && $has_nucmer && $has_delta_filter) or skip "Skipping SVwiden tests because one of samtools, nucmer or delta-filter in path", 2;
-    $script = 'blib/script/SVwiden.pl';
+    $script = 'blib/script/SVwiden';
     
     mkdir "t/test";
     system("perl -w -I lib $script --variants t/widen.vcf --prefix t/widened --ref t/hs37d5_1start.fa --workdir t/test > t/test2.out 2>&1");
@@ -54,7 +54,7 @@ SKIP: {
 SKIP: {
     # Test SVmerge:
     ($has_samtools && $has_edlib) or skip "Skipping SVmerge tests because one of samtools or edlib-aligner is missing from path", 2;
-    $script = 'blib/script/SVmerge.pl';
+    $script = 'blib/script/SVmerge';
     
     mkdir "t/test";
     system("perl -w -I lib $script --variants t/merge.vcf --prefix t/merged --ref t/hs37d5_1start.fa --workdir t/test > t/test3.out 2>&1");
@@ -70,7 +70,7 @@ SKIP: {
 SKIP: {
     # Test SVcomp:
     ($has_samtools && $has_edlib) or skip "Skipping SVcomp tests because one of samtools or edlib-aligner is missing from path", 2;
-    $script = 'blib/script/SVcomp.pl';
+    $script = 'blib/script/SVcomp';
     
     mkdir "t/test";
     system("perl -w -I lib $script --first t/first.vcf --second t/second.vcf --prefix t/comp --ref t/hs37d5_1start.fa --workdir t/test > t/test4.out 2>&1");

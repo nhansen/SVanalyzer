@@ -8,7 +8,7 @@ my $build = Module::Build->new(
         dist_author   => 'NHGRI Perl Programmers',
         dist_abstract => 'Package for analyzing structural variation in sequence data',
         license       => 'perl',
-        scripts       => [qw(scripts/SVrefine.pl scripts/SVcomp.pl scripts/SVwiden.pl scripts/SVmerge.pl)],
+        scripts       => [qw(scripts/SVrefine scripts/SVcomp scripts/SVwiden scripts/SVmerge)],
         configure_requires      => { 'Module::Build' => '0.36' },
         requires      => { },
         );

@@ -1,13 +1,13 @@
 Build.PL
 MANIFEST			This list of files
+scripts/SVcomp
+scripts/SVwiden
+scripts/SVrefine
+scripts/SVbackgenotype
+scripts/SVmerge
 scripts/mummer2vcf_SVs.pl
-scripts/SVcomp.pl
-scripts/SVwiden.pl
 scripts/delta2bed.pl
-scripts/SVbackgenotype.pl
-scripts/SVmerge.pl
 scripts/delta2sam.pl
-scripts/SVrefine.pl
 lib/GTB/FASTA.pm
 lib/GTB/File.pm
 lib/NHGRI/MUMmer/AlignSet.pm

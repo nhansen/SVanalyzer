@@ -12,13 +12,13 @@ our %Opt;
 
 =head1 NAME
 
-svanalyzer merge - group structural variants from one or more VCF files by calculating a distance matrix between nearby variants, then finding connected components of a graph.
+SVmerge - group structural variants from one or more VCF files by calculating a distance matrix between nearby variants, then finding connected components of a graph.
 
 =head1 SYNOPSIS
 
-  svanalyzer merge --ref <reference FASTA file> --variants <VCF-formatted variant file>
-  svanalyzer merge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant file>
-  svanalyzer merge --ref <reference FASTA file> --distance_file <distance file produced by previous run> --variants <VCF-formatted variant file>
+  SVmerge --ref <reference FASTA file> --variants <VCF-formatted variant file>
+  SVmerge --ref <reference FASTA file> --fof <file of paths to VCF-formatted variant file>
+  SVmerge --ref <reference FASTA file> --distance_file <distance file produced by previous run> --variants <VCF-formatted variant file>
 
 =head1 DESCRIPTION
 
@@ -82,7 +82,7 @@ sub process_commandline {
     GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f nocleanup prefix=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
-    if ($Opt{version}) { die "SVmerge.pl, ", q$Revision:$, "\n"; }
+    if ($Opt{version}) { die "SVmerge, ", q$Revision:$, "\n"; }
 
     if ($Opt{workdir} ne '.') {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value

@@ -12,11 +12,11 @@ our %Opt;
 
 =head1 NAME
 
-svanalyzer comp - calculate "distances" between corresponding structural variants in two VCF-formatted files by constructing their alternate haplotypes and comparing them.
+SVcomp - calculate "distances" between corresponding structural variants in two VCF-formatted files by constructing their alternate haplotypes and comparing them.
 
 =head1 SYNOPSIS
 
-  svanalyzer comp --ref <reference FASTA file> --first <first VCF-formatted file> --second <second VCF-formatted file>
+  SVcomp --ref <reference FASTA file> --first <first VCF-formatted file> --second <second VCF-formatted file>
 
 =head1 DESCRIPTION
 
@@ -71,7 +71,7 @@ sub process_commandline {
     GetOptions(\%Opt, qw( ref=s first=s second=s prefix=s ignore_length check_ref workdir=s cleanup manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
-    if ($Opt{version}) { die "SVcomp.pl, ", q$Revision:$, "\n"; }
+    if ($Opt{version}) { die "SVcomp, ", q$Revision:$, "\n"; }
 
     if ($Opt{workdir} ne '.') {
         mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
