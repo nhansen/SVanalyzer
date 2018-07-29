@@ -18,6 +18,7 @@ SVbenchmark - compare two VCF files of structural variants, reporting false posi
 =head1 SYNOPSIS
 
   SVbenchmark --ref <reference FASTA file> --test <VCF-formatted file of test variants> --truth <VCF-formatted file of true variants>
+  SVbenchmark --ref <reference FASTA file> --distance_file <distance file produced by previous run> --test <VCF-formatted file of test variants> --truth <VCF-formatted file of true variants>
 
 =head1 DESCRIPTION
 
@@ -32,83 +33,51 @@ The program steps through two VCF files, a "test" file of structural variants to
 process_commandline();
 
 my $ref_fasta = $Opt{ref};
+my $test_vcf = $Opt{test};
+my $truth_vcf = $Opt{truth};
 
-my $maxwindow = $Opt{'maxwindow'};
+my $max_distance = $Opt{'max_dist'};
 
-my $output_file = $Opt{'output'} || 'compsv.out';
+my $prefix = $Opt{'prefix'};
+my $output_file = "$prefix.report";
 my $workdir = $Opt{'workdir'};
 
-my $rh_variants1 = read_variants($vcf_file1);
-my $rh_variants2 = read_variants($vcf_file2);
-
 my $output_fh = Open($output_file, "w");
-print $output_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 
-foreach my $chr (sort keys %{$rh_variants1}) {
-    my $rh_chrvars1 = $rh_variants1->{$chr};
-    my $rh_chrvars2 = $rh_variants2->{$chr} || {};
-
-    foreach my $var1_id (sort {$a cmp $b} keys %{$rh_chrvars1}) {
-        my $position1 = $rh_chrvars1->{$var1_id}->{'pos'}; 
-        my @nearby_ids2 = grep {abs($rh_chrvars2->{$_}->{'pos'} - $position1) < $maxwindow} keys %{$rh_chrvars2};
-        my $vcf1_line = $rh_chrvars1->{$var1_id}->{'vcf_line'};
-
-        foreach my $nearby_id2 (@nearby_ids2) {
-            my $vcf2_line = $rh_chrvars2->{$nearby_id2}->{'vcf_line'};
-            print $crossvcf1_fh "$vcf1_line";
-            print $crossvcf2_fh "$vcf2_line";
-        }
-    }
+my $rh_distance_matrix;
+if ($Opt{'distance_file'}) {
+    $rh_distance_matrix = read_distance_file($Opt{'distance_file'});
+}
+else {
+    $rh_distance_matrix = calculate_distance_matrix($test_vcf, $truth_vcf);
 }
 
-close $crossvcf1_fh;
-close $crossvcf2_fh;
+write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $output_fh, $prefix );
 
-####TODO#####
-# Use perl module rather than system call #
-#system("/home/nhansen/projects/SVanalyzer/github/SVanalyzer/scripts/SVcomp.pl --ref $ref_fasta --cleanup --ignore_length $crossvcf_file1 $crossvcf_file2 --workdir $workdir > $output_file");
-#
 #------------
 # End MAIN
 #------------
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( maxwindow => 100000, workdir => '.' );
-    GetOptions(\%Opt, qw( ref=s maxwindow=i output=s workdir=s manual help+ version)) || pod2usage(0);
+    %Opt = ( max_dist => 100000, workdir => '.', prefix => 'benchmark' );
+    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i prefix=s workdir=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
     # If non-option arguments are required, uncomment next line
-    pod2usage("SVbenchmark.pl --ref <ref fasta> first_vcf.vcf second_vcf.vcf") if !@ARGV;
+    pod2usage("SVbenchmark --ref <ref fasta> --test <VCF-formatted file of variants to test> --truth <VCF-formatted file of true variants>") if !($Opt{ref} && $Opt{test} && $Opt{truth});
 }
 
-sub read_variants {
-    my $vcf_file = shift;
+sub calculate_distance_matrix {
+    my $test_vcf = shift;
+    my $truth_vcf = shift;
 
-    my %return_variants = (); # keys chromosome, then id, then hash with fields 'pos' and 'vcf_line'
+    my $distance_file = "$prefix.distances";
+    my $distance_fh = Open($distance_file, "w");
 
-    my $vcf_fh = Open($vcf_file);
-    my $varcount = 1;
-    while (<$vcf_fh>) {
-        my $vcf_line = $_;
-        next if ($vcf_line =~ /^#/);
+    print $distance_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 
-        if ($vcf_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
-            my ($chr, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
-            if ($id eq '.') {
-                $id = $varcount;
-                $varcount++;
-            }
-            $return_variants{$chr}->{$id} = {'pos' => $start, 'vcf_line' => $vcf_line};
-        }
-        else {
-            die "Unexpected VCF line:\n$vcf_line";
-        }
-    }
-    close $vcf_fh;
-
-    return {%return_variants};
 }
 
 __END__
