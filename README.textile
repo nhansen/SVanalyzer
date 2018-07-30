@@ -17,13 +17,18 @@ SVanalyzer will build and skip tests for these two commands if the aligners
 are not installed and in the user's path, SVanalyzer will be more functional if 
 these aligners are installed:
 
-For the SVcomp command:
+For the SVcomp, SVmerge, and SVbenchmark commands:
 
 * edlib v.1.1.2 or better (https://github.com/Martinsos/edlib/releases)
 
-For the SVwiden command:
+For the SVwiden and SVrefine commands:
 
 * MUMmer 3 (http://mummer.sourceforge.net/)
+
+The SVbenchmark command has an option --include_bed which uses bedtools
+(http://bedtools.readthedocs.io/en/latest/) to limit the structural variants
+evaluated to regions specified in a BED file. The command will not run with
+this option if you don't have bedtools installed.
 
 h2. Build Instructions
 
