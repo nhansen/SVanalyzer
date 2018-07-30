@@ -122,11 +122,11 @@ sub widen_insertion {
     #print STDERR "query1p $query1p corresponds to ref $ref1 in second align, query2p $query2p corresponds to ref2 $ref2 in first align\n" if ($Opt{verbose});
 
     if (!defined($self->{query1p})) {
-        print STDERR "NONREPETITIVE INSERTION--need to check\n";
+        #print STDERR "NONREPETITIVE INSERTION--need to check\n";
         $self->{query1p} = $query2 - 1;
     }
     if (!defined($self->{query2p})) {
-        print STDERR "NONREPETITIVE INSERTION--need to check\n";
+        #print STDERR "NONREPETITIVE INSERTION--need to check\n";
         $self->{query2p} = $query1 - 1;
     }
 
@@ -174,11 +174,11 @@ sub widen_deletion {
     $self->{ref2p} = $left_align->{ref_matches}->{$query2};
 
     if (!defined($self->{ref1p})) {
-        print STDERR "NONREPETITIVE DELETION--need to check\n";
+        #print STDERR "NONREPETITIVE DELETION--need to check\n";
         $self->{ref1p} = $ref2 - 1;
     }
     if (!defined($self->{ref2p})) {
-        print STDERR "NONREPETITIVE DELETION--need to check\n";
+        #print STDERR "NONREPETITIVE DELETION--need to check\n";
         $self->{ref2p} = $ref1 + 1;
     }
 
