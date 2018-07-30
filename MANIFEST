@@ -3,7 +3,7 @@ MANIFEST			This list of files
 scripts/SVcomp
 scripts/SVwiden
 scripts/SVrefine
-scripts/SVbackgenotype
+scripts/SVbenchmark
 scripts/SVmerge
 scripts/mummer2vcf_SVs.pl
 scripts/delta2bed.pl
