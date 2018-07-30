@@ -36,7 +36,7 @@ $|=1;
 
 my $edlib = `which edlib-aligner`;
 if (!$edlib) {
-    die "Running SVmerge requires that the edlib aligner (http://martinsosic.com/edlib/) executable be in your Linux path.\n";
+    die "Running SVmerge requires that the edlib-aligner (http://martinsosic.com/edlib/) executable be in your Linux path.\n";
 }
 else {
     chomp $edlib;
