@@ -30,13 +30,39 @@ The program steps through two VCF files, a "test" file of structural variants to
 # Begin MAIN 
 #------------
 
+$| = 1;
+
+my $edlib = `which edlib-aligner`;
+if (!$edlib) {
+    die "Running SVbenchmark requires that edlib-aligner (http://martinsosic.com/edlib/) executable be in your Linux path.\n";
+}
+else {
+    chomp $edlib;
+}
+
 process_commandline();
 
 my $ref_fasta = $Opt{ref};
 my $test_vcf = $Opt{test};
 my $truth_vcf = $Opt{truth};
 
+my $include_bed = $Opt{'includebed'};
+
+my $bedtools;
+if ($include_bed) {
+    $bedtools = `which bedtools`;
+    if (!$bedtools) {
+        die "Running SVbenchmark with the --includebed option requires that the bedtools (http://bedtools.readthedocs.io/en/latest/) executable be in your Linux path.\n";
+    }
+    else {
+        chomp $bedtools;
+    }
+}
+
 my $max_distance = $Opt{'max_dist'};
+my $relshift = $Opt{'relshift'};
+my $relsizediff = $Opt{'relsizediff'};
+my $reldist = $Opt{'reldist'};
 
 my $prefix = $Opt{'prefix'};
 my $output_file = "$prefix.report";
@@ -49,10 +75,10 @@ if ($Opt{'distance_file'}) {
     $rh_distance_matrix = read_distance_file($Opt{'distance_file'});
 }
 else {
-    $rh_distance_matrix = calculate_distance_matrix($test_vcf, $truth_vcf);
+    $rh_distance_matrix = calculate_distance_matrix($test_vcf, $truth_vcf, $include_bed);
 }
 
-write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $output_fh, $prefix );
+write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $output_fh, $prefix );
 
 #------------
 # End MAIN
@@ -60,8 +86,8 @@ write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $output_fh, $pr
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( max_dist => 100000, workdir => '.', prefix => 'benchmark' );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i prefix=s workdir=s manual help+ version)) || pod2usage(0);
+    %Opt = ( max_dist => 100000, workdir => '.', prefix => 'benchmark', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i prefix=s includebed=s distance_file=s workdir=s relshift=f relsizediff=f reldist=f manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -72,12 +98,280 @@ sub process_commandline {
 sub calculate_distance_matrix {
     my $test_vcf = shift;
     my $truth_vcf = shift;
+    my $bedfile = shift;
 
     my $distance_file = "$prefix.distances";
     my $distance_fh = Open($distance_file, "w");
 
     print $distance_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 
+    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -wa | " :
+                       (($test_vcf =~ /\.gz$/) ? 
+                       "gunzip -c $test_vcf | grep -v \'#\' | sort -k1,1 -k2,2n | " :
+                       "grep -v \'#\' $test_vcf | sort -k1,1 -k2,2n | ");
+    my $test_sortedvcf_fh = Open("$test_command");
+    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -wa | " :
+                       (($truth_vcf =~ /\.gz$/) ? 
+                       "gunzip -c $truth_vcf | grep -v \'#\' | sort -k1,1 -k2,2n | " :
+                       "grep -v \'#\' $truth_vcf | sort -k1,1 -k2,2n | ");
+    my $true_sortedvcf_fh = Open("$truth_command");
+
+    my $rh_current_last_sv; # to check for sorting
+    my $total_test_svs = 0;
+    my $total_true_svs = 0;
+
+    my @current_neighborhood_true_svs = ();
+
+    my %distances = (); # hash of distance arrays for pairs of ids
+
+    while (my $rh_testsv = retrieve_next_sorted_sv($test_sortedvcf_fh)) {
+   
+        my $test_chrom = $rh_testsv->{chrom}; 
+        my $test_pos = $rh_testsv->{pos}; 
+        next if (!($test_chrom));
+        $total_test_svs++;
+   
+        # be sure @current_neighborhood_true_svs contains only nearby true SVs: 
+        while (@current_neighborhood_true_svs) {
+            my $rh_first = $current_neighborhood_true_svs[0];
+            if (($rh_first->{chrom} ne $test_chrom) ||
+                ($test_pos - $rh_first->{pos} > $max_distance)) { # not needed
+                shift @current_neighborhood_true_svs;
+            }
+            else { # first variant should be checked
+                last;
+            }
+        }
+
+        # add new true SVs until beyond current SV's window:
+
+        while (1) {
+            my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh);
+            my $truth_chrom = $rh_nexttruesv->{chrom}; 
+            my $truth_pos = $rh_nexttruesv->{pos}; 
+            next if (!($truth_chrom));
+            $total_true_svs++;
+
+            push @current_neighborhood_true_svs, $rh_nexttruesv;
+            last if (($test_chrom ne $rh_nexttruesv->{chrom}) ||
+                    ($rh_nexttruesv->{pos} - $test_pos > $max_distance));
+        }
+
+        # now compare test SV to all true SVs in window:
+   
+        foreach my $rh_truesv (@current_neighborhood_true_svs) { 
+            my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
+                                                        -sv1_info => $rh_testsv,
+                                                        -sv2_info => $rh_truesv,
+                                                        -workdir => $workdir);
+            if ($comp_obj->potential_match()) {
+                my $rh_distance_metrics = $comp_obj->calc_distance();
+                my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+                my $max_shift = $rh_distance_metrics->{'max_shift'};
+                my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+                my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+                my $size_diff = $rh_distance_metrics->{'size_diff'};
+                my $size_avg = $rh_distance_metrics->{'size_avg'};
+                my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+    
+                my $pos_diff = abs($rh_testsv->{pos} - $rh_truesv->{pos});
+                # divide maximum shift by the minimum absolute size of the two variants:
+                my $d1 = abs($max_shift)/$shared_denominator;
+                # divide the size difference of the two indels by the average absolute size of the difference
+                my $d2 = abs($size_diff)/$shared_denominator;
+                # divide edit distance by the minimum alternate haplotype length:
+                my $d3 = abs($edit_dist)/$shared_denominator;
+                my $id1 = $rh_testsv->{id};
+                my $id2 = $rh_truesv->{id};
+                print $distance_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
+                $distances{$id1}->{$id2} = [$pos_diff, $d1, $d2, $d3];
+            }
+        }
+    }
+
+    close $test_sortedvcf_fh;
+    close $true_sortedvcf_fh;
+    close $distance_fh;
+    
+    return {%distances};
+
+}
+
+sub read_distance_file {
+    my $distance_file = shift;
+
+    my $dist_fh = Open("$distance_file");
+
+    my %distances = ();
+    while (<$dist_fh>) {
+        if (/^DIST/) {
+            chomp;
+            my ($dummy, $id1, $id2, $altlength_avg, $altlength_diff, $size_avg, $size_diff, $edit_dist, $max_shift, $pos_diff, $d1, $d2, $d3) = split /\t/, $_;
+            $distances{$id1}->{$id2} = [$pos_diff, $d1, $d2, $d3];
+        }
+    }
+
+    close $dist_fh;
+    return {%distances};
+}
+
+sub retrieve_next_sorted_sv {
+    my $variant_fh = shift;
+
+    my $next_line = <$variant_fh>;
+
+    if (!$next_line) {
+        return $next_line;
+    }
+    chomp $next_line;
+    if ($next_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
+        my ($chrom, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
+        $ref = uc($ref);
+        $alt = uc($alt);
+ 
+        my $reflength = length($ref);
+        my $altlength = length($alt);
+ 
+        my $end; # if we have sequence, end will be determined as last base of REF, otherwise, from END=
+        if (($ref =~ /^([ATGCN]+)$/) && ($alt =~ /^([ATGCN]+)$/)) {
+            $end = $start + $reflength - 1;
+        }
+        elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
+            return {};
+        }
+        else { # check for END= INFO tag
+            warn "Skipping non-ATGC ref or alt:$next_line";
+            return {};
+        }
+
+        return {'chrom' => $chrom, 'pos' => $start, 'start' => $start, 
+                'end' => $end, 'id' => $id, 'ref' => $ref,
+                'alt' => $alt, 'reflength' => $reflength, 
+                'altlength' => $altlength};
+    }
+    else {
+        die "Unexpected VCF line:\n$next_line";
+    }
+}
+
+sub write_fp_fn_variants {
+    my $rh_distances = shift;
+    my $test_vcf = shift;
+    my $truth_vcf = shift;
+    my $bedfile = shift;
+    my $output_fh = shift;
+    my $prefix = shift;
+
+    # open files for false positives and false negatives:
+
+    my ($no_falsepositives, $no_falsenegatives, $no_truepositives,
+           $no_detectedtruepositives) = (0, 0, 0, 0);
+    my $rh_truepositive_truth_ids = {};
+
+    my $fp_fh = Open("$prefix.falsepositives.vcf", "w");
+
+    # find fp's, fn's:
+
+    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -wa | " :
+                       (($test_vcf =~ /\.gz$/) ? 
+                       "gunzip -c $test_vcf | grep -v \'#\' | " :
+                       "grep -v \'#\' $test_vcf | ");
+    my $test_vcf_fh = Open("$test_command");
+
+    while (<$test_vcf_fh>) {
+        if (/^#/) { # header line--print to fp file:
+            print $fp_fh $_;
+        }
+        else {
+            my $vcf_line = $_;
+            chomp;
+            my @fields = split /\t/, $_;
+            my $test_id = $fields[2];
+            my @matched_ids = ($rh_distances->{$test_id}) ?
+                               keys %{$rh_distances->{$test_id}} : ();
+            my @true_positives = ();
+            foreach my $truth_id (@matched_ids) {
+                my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
+                if ($matchdistances[0] <= $relshift &&
+                    $matchdistances[1] <= $relsizediff &&
+                    $matchdistances[2] <= $reldist) { # found a match--TP!
+                    push @true_positives, $truth_id;
+                    push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+                }
+            }
+
+            my $no_tps = @true_positives;
+            if (!($no_tps)) { # no match--FP!
+                print $fp_fh $vcf_line;
+                $no_falsepositives++;
+            }
+            elsif ($no_tps > 1) { # potential duplicates
+                my $truth_ids = join ',', @true_positives;
+                print STDERR "More than one match for $test_id: $truth_ids. Does your truth file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+            }
+
+            if ($no_tps) {
+                $no_truepositives++;
+            }
+        }
+    }
+    close $fp_fh;
+    close $test_vcf_fh;
+
+    my $fn_fh = Open("$prefix.falsenegatives.vcf", "w");
+
+    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -wa | " :
+                       (($truth_vcf =~ /\.gz$/) ? 
+                       "gunzip -c $truth_vcf | grep -v \'#\' | " :
+                       "grep -v \'#\' $truth_vcf | ");
+    my $truth_vcf_fh = Open("$truth_command");
+    while (<$truth_vcf_fh>) {
+        if (/^#/) { # header line--print to fn file:
+            print $fn_fh $_;
+        }
+        else {
+            my $vcf_line = $_;
+            chomp;
+            my @fields = split /\t/, $_;
+            my $truth_id = $fields[2];
+            my @test_matches = ($rh_truepositive_truth_ids->{$truth_id}) ? 
+                              @{$rh_truepositive_truth_ids->{$truth_id}} : ();
+            my $no_test_matches = @test_matches;
+
+            if (!($no_test_matches)) { # missed--FN!
+                print $fn_fh $vcf_line;
+                $no_falsenegatives++;
+            }
+            elsif ($no_test_matches > 1) {
+                my $test_ids = join ',', @test_matches;
+                print STDERR "More than one match for $truth_id: $test_ids. Does your test file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+            }
+
+            if ($no_test_matches) {
+                $no_detectedtruepositives++;
+            }
+        }
+    }
+    close $fn_fh;
+    close $truth_vcf_fh;
+
+    # print summary statistics:
+    print $output_fh "RECALL:\n";
+    print $output_fh "Number of detected true variants (DTP): $no_detectedtruepositives\n";
+    print $output_fh "Number of undetected true variants (FN): $no_falsenegatives\n";
+    my $recallval = $no_detectedtruepositives/($no_detectedtruepositives+$no_falsenegatives);
+    my $recall = sprintf("%5.2f", 100*$recallval);
+    print $output_fh "Recall (DTP/(DTP+FN)): $recall\%\n";
+    print $output_fh "\n";
+    print $output_fh "PRECISION:\n";
+    print $output_fh "Number of predictions that are true (PTP): $no_truepositives\n";
+    print $output_fh "Number of false positives (FP): $no_falsepositives\n";
+    my $precisionval = $no_truepositives/($no_truepositives+$no_falsepositives);
+    my $precision = sprintf("%5.2f", 100*$precisionval);
+    print $output_fh "Precision (PTP/(PTP+FP)): $precision\%\n";
+    print $output_fh "\n";
+    my $f1score = 2*$recallval*$precisionval/($recallval+$precisionval);
+    print $output_fh "F1 (2*Recall*Precision/(Recall+Precision): $f1score\n";
 }
 
 __END__
