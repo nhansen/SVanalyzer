@@ -105,12 +105,12 @@ sub calculate_distance_matrix {
 
     print $distance_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
 
-    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -wa | " :
+    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -u -wa | " :
                        (($test_vcf =~ /\.gz$/) ? 
                        "gunzip -c $test_vcf | grep -v \'#\' | sort -k1,1 -k2,2n | " :
                        "grep -v \'#\' $test_vcf | sort -k1,1 -k2,2n | ");
     my $test_sortedvcf_fh = Open("$test_command");
-    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -wa | " :
+    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -u -wa | " :
                        (($truth_vcf =~ /\.gz$/) ? 
                        "gunzip -c $truth_vcf | grep -v \'#\' | sort -k1,1 -k2,2n | " :
                        "grep -v \'#\' $truth_vcf | sort -k1,1 -k2,2n | ");
@@ -147,6 +147,7 @@ sub calculate_distance_matrix {
 
         while (1) {
             my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh);
+            last if (!$rh_nexttruesv);
             my $truth_chrom = $rh_nexttruesv->{chrom}; 
             my $truth_pos = $rh_nexttruesv->{pos}; 
             next if (!($truth_chrom));
@@ -272,7 +273,7 @@ sub write_fp_fn_variants {
 
     # find fp's, fn's:
 
-    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -wa | " :
+    my $test_command = ($bedfile) ? "bedtools intersect -a $test_vcf -b $bedfile -u -wa | " :
                        (($test_vcf =~ /\.gz$/) ? 
                        "gunzip -c $test_vcf | grep -v \'#\' | " :
                        "grep -v \'#\' $test_vcf | ");
@@ -320,7 +321,7 @@ sub write_fp_fn_variants {
 
     my $fn_fh = Open("$prefix.falsenegatives.vcf", "w");
 
-    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -wa | " :
+    my $truth_command = ($bedfile) ? "bedtools intersect -a $truth_vcf -b $bedfile -u -wa | " :
                        (($truth_vcf =~ /\.gz$/) ? 
                        "gunzip -c $truth_vcf | grep -v \'#\' | " :
                        "grep -v \'#\' $truth_vcf | ");
