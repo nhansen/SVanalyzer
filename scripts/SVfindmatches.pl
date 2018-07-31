@@ -13,11 +13,11 @@ our %Opt;
 
 =head1 NAME
 
-SVfindmatches.pl - construct two VCF files of side-by-side variants for comparison, based on windowing of a specified size, and then compare the corresponding nearby variants with SVcomp.
+SVfindmatches - construct two VCF files of side-by-side variants for comparison, based on windowing of a specified size, and then compare the corresponding nearby variants with SVcomp.
 
 =head1 SYNOPSIS
 
-  SVfindmatches.pl --ref reference.fasta first_vcf.vcf second_vcf.vcf
+  SVfindmatches --ref reference.fasta first_vcf.vcf second_vcf.vcf
 
 =head1 DESCRIPTION
 
@@ -52,13 +52,13 @@ my $maxwindow = $Opt{'maxwindow'};
 my $output_file = $Opt{'output'} || 'compsv.out';
 my $workdir = $Opt{'workdir'};
 
-my $crossvcf1_fh = Open($crossvcf_file1, "w");
-my $crossvcf2_fh = Open($crossvcf_file2, "w");
-
 my $rh_variants1 = read_variants($vcf_file1);
 my $rh_variants2 = read_variants($vcf_file2);
 
-foreach my $chr (keys %{$rh_variants1}) {
+my $output_fh = Open($output_file, "w");
+print $output_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+
+foreach my $chr (sort keys %{$rh_variants1}) {
     my $rh_chrvars1 = $rh_variants1->{$chr};
     my $rh_chrvars2 = $rh_variants2->{$chr} || {};
 
@@ -80,8 +80,8 @@ close $crossvcf2_fh;
 
 ####TODO#####
 # Use perl module rather than system call #
-system("/home/nhansen/projects/SVanalyzer/github/SVanalyzer/scripts/SVcomp.pl --ref $ref_fasta --cleanup --ignore_length $crossvcf_file1 $crossvcf_file2 --workdir $workdir > $output_file");
-
+#system("/home/nhansen/projects/SVanalyzer/github/SVanalyzer/scripts/SVcomp.pl --ref $ref_fasta --cleanup --ignore_length $crossvcf_file1 $crossvcf_file2 --workdir $workdir > $output_file");
+#
 #------------
 # End MAIN
 #------------
@@ -92,7 +92,7 @@ sub process_commandline {
     GetOptions(\%Opt, qw( ref=s maxwindow=i output=s workdir=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
-    if ($Opt{version}) { die "compSV.pl, ", q$Revision:$, "\n"; }
+    if ($Opt{version}) { die "SVfindmatches.pl, ", q$Revision:$, "\n"; }
     # If non-option arguments are required, uncomment next line
     pod2usage("SVfindmatches.pl --ref <ref fasta> first_vcf.vcf second_vcf.vcf") if !@ARGV;
 }
