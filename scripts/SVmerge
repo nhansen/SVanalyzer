@@ -73,7 +73,7 @@ my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances,
 write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
 
 unless ($Opt{nocleanup}) { # delete the working directory
-    
+    rmdir $workingdir; 
 }
 
 #------------
