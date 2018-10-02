@@ -68,9 +68,13 @@ else {
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = calc_distances($vcf_file, $fof_file);
 }
 
-my $rh_cluster_info = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
+my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
 
-write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info);
+write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
+
+unless ($Opt{nocleanup}) { # delete the working directory
+    
+}
 
 #------------
 # End MAIN
@@ -121,8 +125,9 @@ sub open_files_and_sort {
         my $this_command = ($vcf_file =~ /gz$/) ? "gunzip -c $vcf_file" : "cat $vcf_file";
         push @commands, $this_command;
     }
+    my $header_capture = ($vcf_files[0] =~ /gz$/) ? "gunzip -c $vcf_files[0] | grep \'#\'" : "grep \'#\' $vcf_files[0]";
     my $commandpipe = join ';', @commands;
-    $commandpipe = "(".$commandpipe.") | grep -v '#' | sort -k1,1 -k2,2n |";
+    $commandpipe = "(" . $header_capture . "; (" . $commandpipe . " | grep -v '#' | sort -k1,1 -k2,2n ) ) |";
     my $variant_fh = Open($commandpipe);
 
     return $variant_fh;
@@ -283,7 +288,7 @@ sub calc_distances {
     close $sortedvcf_fh;
     close $dist_fh;
     
-    print "Read $total_svs SVs from file $vcf_file\n";
+    #print "Read $total_svs SVs from file $vcf_file\n";
 
     return ({%distances}, [@nodes], {%node_index}, [@node_edges]);
 }
@@ -320,6 +325,9 @@ sub retrieve_next_sorted_sv {
         return {'chrom' => $chrom, 'pos' => $start, 'start' => $start, 'end' => $end, 'id' => $id, 'ref' => $ref,
                 'alt' => $alt, 'reflength' => $reflength, 'altlength' => $altlength};
     }
+    elsif ($next_line =~ /^#/) { # comment
+        return {'chrom' => undef};
+    }
     else {
         die "Unexpected VCF line:\n$next_line";
     }
@@ -338,19 +346,23 @@ sub find_clusters {
     }
     
     my %cluster_info = ();
+    my %clustered_variants = ();
     for (my $i=0; $i<=$#nodes; $i++) {
         next if ($visited[$i]);
         my @connectednodes = dfs($i, $ra_node_edges, \@visited);
         my @nodenames = map { $nodes[$_] } @connectednodes;
         my $nodestring = join ':', @nodenames;
-        print "Found node cluster $nodestring\n";
+        #print "Found node cluster $nodestring\n";
         my ($clustercall, $no_cluster_calls, $dummynodestring, $no_exact_matches, $exactsubcluster, $maxdist1, $maxdist2, $maxdist3) =
                      analyze_cluster($nodestring, $rh_distances);
-        print "$nodestring\t$clustercall\t$no_cluster_calls\t$nodestring\t$no_exact_matches\t$exactsubcluster\t$maxdist1\t$maxdist2\t$maxdist3\n";
+        #print "$nodestring\t$clustercall\t$no_cluster_calls\t$nodestring\t$no_exact_matches\t$exactsubcluster\t$maxdist1\t$maxdist2\t$maxdist3\n";
         $cluster_info{$clustercall} = {'nodestring' => $nodestring, 'exactstring' => $exactsubcluster, 'maxdists' => [$maxdist1, $maxdist2, $maxdist3]};
+        foreach my $nodename (@nodenames) {
+            $clustered_variants{$nodename} = 1;
+        }
     }
    
-    return {%cluster_info}; 
+    return ({%cluster_info}, {%clustered_variants}); 
 }
 
 sub write_cluster_vcf {
@@ -358,6 +370,7 @@ sub write_cluster_vcf {
     my $fof_file = shift;
     my $vcf_output = shift;
     my $rh_cluster_info = shift;
+    my $rh_clustered_variants = shift;
 
     my $sortedvcf_fh = open_files_and_sort($vcf_file, $fof_file);
     my $newvcf_fh = Open($vcf_output, "w");
@@ -383,6 +396,9 @@ sub write_cluster_vcf {
 
             if ($rh_cluster_info->{$id_field}) { # this is a cluster rep!
                 write_vcf_line_with_info($newvcf_fh, \@fields, $rh_cluster_info->{$id_field}, $ra_allowed_info_fields);
+            }
+            elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print
+                write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
             }
         }
     }
@@ -469,7 +485,7 @@ sub analyze_cluster {
     my $max_exact_clustersize = 0;
 
     foreach my $unique_cluster (@unique_clusters) {
-        print "UNIQUE $unique_cluster\n";
+        #print "UNIQUE $unique_cluster\n";
         my @unique_vars = split /:/, $unique_cluster;
         my $no_vars = @unique_vars;
         if ($no_vars == $max_exact_clustersize) { # it's a tie
