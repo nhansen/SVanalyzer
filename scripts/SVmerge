@@ -127,7 +127,7 @@ sub open_files_and_sort {
     }
     my $header_capture = ($vcf_files[0] =~ /gz$/) ? "gunzip -c $vcf_files[0] | grep \'#\'" : "grep \'#\' $vcf_files[0]";
     my $commandpipe = join ';', @commands;
-    $commandpipe = "(" . $header_capture . "; (" . $commandpipe . " | grep -v '#' | sort -k1,1 -k2,2n ) ) |";
+    $commandpipe = "(" . $header_capture . "; (" . $commandpipe . ") | grep -v '#' | sort -k1,1 -k2,2n ) |";
     my $variant_fh = Open($commandpipe);
 
     return $variant_fh;
@@ -273,9 +273,9 @@ sub calc_distances {
                         push @{$node_edges[$index2 - 1]}, $index1 - 1;
                     }
                     my $idlesser = (($id1 cmp $id2) > 0) ? 
-                                     $id1 : $id2;
-                    my $idgreater = (($id1 cmp $id2) > 0) ? 
                                      $id2 : $id1;
+                    my $idgreater = (($id1 cmp $id2) > 0) ? 
+                                     $id1 : $id2;
                     $distances{"$idlesser:$idgreater"} = [$pos_diff, $d1, $d2, $d3];
                 }
             }
@@ -449,7 +449,7 @@ sub analyze_cluster {
             my $idlesser = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$j] : $nodes[$i];
             my $idgreater = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$i] : $nodes[$j];
             if (!$rh_dists->{"$idlesser:$idgreater"}) {
-                #print STDERR "Missing distance information for $idlesser:$idgreater!\n";
+                print STDERR "Missing distance information for $idlesser:$idgreater!\n";
                 next;
             }
             my ($thisposdist, $this_dist1, $this_dist2, $this_dist3) = @{$rh_dists->{"$idlesser:$idgreater"}};
