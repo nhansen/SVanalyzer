@@ -12,6 +12,7 @@ use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
 use NHGRI::MUMmer::AlignSet;
+use NHGRI::MiniMap2::AlignSet;
 use NHGRI::SVanalyzer::Align2SV;
 
 our %Opt;
@@ -21,6 +22,8 @@ our %Opt;
 SVrefine - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants in those regions and print them out in VCF format.
 
 =head1 SYNOPSIS
+
+  SVrefine --bam <BAM file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --includeseqs
 
   SVrefine --delta <path to delta file of alignments> --regions <path to BED-formatted file of regions> --ref_fasta <path to reference multi-FASTA file> --query_fasta <path to query multi-FASTA file> --outvcf <path to output VCF file> --svregions <path to bed file of widened SV regions> --outref <path to bed file of homozygous reference regions> --nocov <path to bed file of regions with no coverage> --includeseqs
 
@@ -41,6 +44,8 @@ $ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta && $ref_fasta !~ m:^/:);
 $query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta && $query_fasta !~ m:^/:);
 
 my $delta_file = $Opt{delta};
+my $bam_file = $Opt{bam};
+
 my $regions_file = $Opt{regions};
 
 my $samplename = $Opt{samplename};
@@ -57,24 +62,30 @@ my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no cov
 my $svregionsfile = $Opt{svregions}; # file to write widened SV regions
 my $svregions_fh = Open($svregionsfile, "w") if ($svregionsfile); # will write widened SV regions to bed formatted file 
 
-my $delta_obj = NHGRI::MUMmer::AlignSet->new(
-                  -delta_file => $delta_file,
-                  -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
-                  -storequeryentrypairs => 1,
-                  -extend_exact => 1,
-                  -reference_file => $ref_fasta,
-                  -query_file => $query_fasta);
+my $alignset_obj = ($delta_file) ? NHGRI::MUMmer::AlignSet->new(
+                                                   -delta_file => $delta_file,
+                                                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
+                                                   -storequeryentrypairs => 1,
+                                                   -extend_exact => 1,
+                                                   -reference_file => $ref_fasta,
+                                                   -query_file => $query_fasta ) :
+                                   NHGRI::MiniMap2::AlignSet->new(
+                                                   -bam_file => $bam_file,
+                                                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
+                                                   -storequeryentrypairs => 1,
+                                                   -reference_file => $ref_fasta,
+                                                   -query_file => $query_fasta);
 
 # set up assembly FASTA objects:
-$ref_fasta = $delta_obj->{reference_file} if (!$ref_fasta);
-$query_fasta = $delta_obj->{query_file} if (!$query_fasta);
+$ref_fasta = $alignset_obj->{reference_file} if (!$ref_fasta);
+$query_fasta = $alignset_obj->{query_file} if (!$query_fasta);
 
 my $ref_db = GTB::FASTA->new($ref_fasta);
 my $query_db = GTB::FASTA->new($query_fasta);
 
 my @ref_entries = $ref_db->ids(); # ordered as in fasta index
 my $rh_regions = ($regions_file) ? read_regions_file($regions_file) :
-                                   discover_regions($delta_obj, $ref_db);
+                                   discover_regions($alignset_obj, $ref_db);
 
 write_header($outvcf_fh) if (!$Opt{noheader});
 
@@ -85,7 +96,7 @@ foreach my $chrom (@ref_entries) {
     if ($ra_regions) {
         my $ra_variant_lines = [];
         my $ra_ref_cov = []; # regions covered with a reference-matching contig
-        process_region($chrom, $ra_regions, $delta_obj, $nocovregions_fh, $ref_db, $query_db, $ra_variant_lines, $ra_ref_cov); # populates $ra_variant_lines, $ra_ref_cov
+        process_region($chrom, $ra_regions, $alignset_obj, $nocovregions_fh, $ref_db, $query_db, $ra_variant_lines, $ra_ref_cov); # populates $ra_variant_lines, $ra_ref_cov
         write_variants_to_vcf($outvcf_fh, $refregions_fh, $svregions_fh, $ra_variant_lines, $ra_ref_cov, \$id);
     }
 }
@@ -102,15 +113,15 @@ close $nocovregions_fh;
 sub process_commandline {
     # Set defaults here
     %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0 );
-    GetOptions(\%Opt, qw( delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s
+    GetOptions(\%Opt, qw( bam=s delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s
                           nocov=s buffer=i svregions=s bufseg=i maxsize=i verbose
                           includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVrefine, ", q$Revision: 7771 $, "\n"; }
 
-    if (!($Opt{delta})) {
-        print STDERR "Must specify a delta file path with --delta option!\n"; 
+    if (!($Opt{delta}) && !($Opt{bam})) {
+        print STDERR "Must specify a bam file of alignments with the --bam option or a delta file path with --delta option!\n"; 
         pod2usage(0);
     }
 
@@ -160,14 +171,16 @@ sub read_regions_file {
 } ## end read_regions_file
 
 sub discover_regions {
-    my $delta_obj = shift;
+    my $alignset_obj = shift;
     my $ref_db = shift;
 
-    my $rh_ref_entrypairs = $delta_obj->{refentrypairs};
+    print "Discovering regions!\n";
+    my $rh_ref_entrypairs = $alignset_obj->{refentrypairs};
     my %regions_hash = (); # by chromosome, then list of regions
     
     my $no_regions = 0; 
     foreach my $chrom (keys %{$rh_ref_entrypairs}) {
+        print "$chrom regions\n";
         my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
         my @ref_starts = ();
         my @ref_ends = ();
@@ -195,7 +208,7 @@ sub discover_regions {
             }
         }
     }
-    print STDERR "Discovered $no_regions regions\n" if ($Opt{verbose});
+    print "Discovered $no_regions regions\n" if ($Opt{verbose});
     return {%regions_hash};
 
 } ## end discover_regions
@@ -225,10 +238,11 @@ sub write_header {
     print $fh "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE\n";
 }
 
+# process all the regions from a chromosome
 sub process_region {
     my $chrom = shift;
     my $ra_regions = shift;
-    my $delta_obj = shift;
+    my $alignset_obj = shift;
     my $outnc_fh = shift;
     my $ref_db = shift;
     my $query_db = shift;
@@ -237,8 +251,8 @@ sub process_region {
 
     # examine regions for broken alignments:
 
-    my $rh_ref_entrypairs = $delta_obj->{refentrypairs}; # store entry pairs by ref entry for quick retrieval
-    my $rh_query_entrypairs = $delta_obj->{queryentrypairs}; # store entry pairs by query entry for quick retrieval
+    my $rh_ref_entrypairs = $alignset_obj->{refentrypairs}; # store entry pairs by ref entry for quick retrieval
+    my $rh_query_entrypairs = $alignset_obj->{queryentrypairs}; # store entry pairs by query entry for quick retrieval
 
     my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
 
@@ -247,7 +261,7 @@ sub process_region {
         my $regionstring = "$chrom:$start-$end";
 
         if (!check_region($ref_db, $chrom, $start, $end)) {
-            print STDERR "REGION $regionstring CHROMEND\n" if ($Opt{verbose});
+            print "REGION $regionstring CHROMEND\n" if ($Opt{verbose});
             next;
         }
 
@@ -269,7 +283,7 @@ sub process_region {
         my @aligned_contigs = map { $_->{query_entry} } @valid_entry_pairs;
         my $contig_string = join ':', @aligned_contigs;
         my $no_entry_pairs = @valid_entry_pairs;
-        print STDERR "REGION $regionstring ENTRYPAIRS $no_entry_pairs\n" if ($Opt{verbose});
+        print "REGION $regionstring ENTRYPAIRS $no_entry_pairs\n" if ($Opt{verbose});
 
         my @refaligns = ();
         foreach my $rh_rentry_pair (@valid_entry_pairs) { # for each contig aligned across region
@@ -300,7 +314,7 @@ sub process_region {
                 }
             }
             if (!$nonref_found) {
-                print STDERR "REGION $regionstring NOVARFOUND\n" if ($Opt{verbose});
+                print "REGION $regionstring NOVARFOUND\n" if ($Opt{verbose});
                 next;
             }
 
@@ -313,7 +327,7 @@ sub process_region {
                     my $query_start = $rh_align->{query_start};
                     my $query_end = $rh_align->{query_end};
     
-                    print STDERR "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n";
+                    print "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n";
                 }
             }
 
@@ -323,7 +337,7 @@ sub process_region {
             my $reference_aligns = @ref_aligns;
             my $nr_aligns = $all_aligns - $reference_aligns;
             if ($nr_aligns) {
-                print STDERR "REGION $regionstring NONREFALIGNS $nr_aligns\n" if ($Opt{verbose});
+                print "REGION $regionstring NONREFALIGNS $nr_aligns\n" if ($Opt{verbose});
             } 
             if (@ref_aligns <= 3) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
@@ -331,24 +345,24 @@ sub process_region {
                 if (@ref_aligns == 2 && $ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) {
                     # order them, if possible, checking for consistency:
                     @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1]);
-                    print STDERR "REGION $regionstring ONESIMPLE\n" if (@simple_breaks==1) && ($Opt{verbose});
+                    print "REGION $regionstring ONESIMPLE\n" if (@simple_breaks==1) && ($Opt{verbose});
                 }
                 elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) && 
                     ($ref_aligns[1]->{comp} == $ref_aligns[2]->{comp})) {
                     @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
-                    print STDERR "REGION $regionstring TWOSIMPLE\n" if (@simple_breaks==2) && ($Opt{verbose});
+                    print "REGION $regionstring TWOSIMPLE\n" if (@simple_breaks==2) && ($Opt{verbose});
                 }
                 elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} != $ref_aligns[1]->{comp}) &&
                        ($ref_aligns[1]->{comp} != $ref_aligns[2]->{comp})) {
                     @inversion_aligns = ($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
-                    print STDERR "REGION $regionstring INVERSION\n" if ($Opt{verbose});
+                    print "REGION $regionstring INVERSION\n" if ($Opt{verbose});
                 }
 
                 foreach my $ra_simple_break (@simple_breaks) {
                     my $left_align = $ra_simple_break->[0];
                     my $right_align = $ra_simple_break->[1];
 
-                    my $align2sv_obj = NHGRI::SVanalyzer::Align2SV->new( -delta_obj => $delta_obj,
+                    my $align2sv_obj = NHGRI::SVanalyzer::Align2SV->new( -alignset_obj => $alignset_obj,
                                                                          -left_align => $left_align,
                                                                          -right_align => $right_align );
     
@@ -366,14 +380,15 @@ sub process_region {
                     }
                     $svsize = abs($svsize);
                     my $repeat_bases = $align2sv_obj->{repeat_bases};
+                    print "FOUNDSV\t$chrom\t$ref1\t$ref2\t$query1\t$query2\t$svsize\t$type\t$repeat_bases\n";
   
                     if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
-                        print STDERR "REGION $regionstring ARTIFACT";
+                        print "REGION $regionstring ARTIFACT";
                         next;
                     }
 
                     if (($Opt{maxsize}) && ($svsize > $Opt{maxsize})) {
-                        print STDERR "REGION $regionstring MAXSIZE\n";
+                        print "REGION $regionstring MAXSIZE\n";
                         next;
                     }
 
@@ -399,7 +414,7 @@ sub process_region {
                     my $middle_align = $inversion_aligns[1];
                     my $right_align = $inversion_aligns[2];
         
-                    process_inversion($delta_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
+                    process_inversion($alignset_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
                 }
             }
             elsif (@ref_aligns>3) {
@@ -442,22 +457,22 @@ sub find_valid_entry_pairs {
         else {
             my $no_left_aligns = @left_span_aligns;
             my $no_right_aligns = @right_span_aligns;
-            print STDERR "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n" if ($Opt{verbose});
+            print "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n" if ($Opt{verbose});
         }
 
         # want to find the same comp value on left and right side:
         if (grep {$_->{comp} == 0} @left_span_aligns && grep {$_->{comp} == 0} @right_span_aligns) {
             $rh_entrypair->{comp} = 0;
             push @valid_entry_pairs, $rh_entrypair;
-            print STDERR "At least one forward alignment on left and right\n" if ($Opt{verbose});
+            print "At least one forward alignment on left and right\n" if ($Opt{verbose});
         }
         elsif (grep {$_->{comp} == 1} @left_span_aligns && grep {$_->{comp} == 1} @right_span_aligns) {
             $rh_entrypair->{comp} = 1;
             push @valid_entry_pairs, $rh_entrypair;
-            print STDERR "At least one reverse alignment on left and right\n" if ($Opt{verbose});
+            print "At least one reverse alignment on left and right\n" if ($Opt{verbose});
         }
         else {
-            print STDERR "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";
+            print "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";
             next;
         }
     }
@@ -515,11 +530,11 @@ sub find_breaks {
                 push @valid_breaks, [$left_align, $right_align];
             }
             else {
-                print STDERR "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
+                print "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
             }
         }
         else {
-            print STDERR "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
+            print "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
         }
     }
 
@@ -527,7 +542,7 @@ sub find_breaks {
 }
 
 sub process_inversion {
-    my $delta_obj = shift;
+    my $alignset_obj = shift;
     my $left_align = shift;
     my $middle_align = shift;
     my $right_align = shift;
@@ -748,12 +763,18 @@ __END__
 
 =over 4
 
+=item B<--bam <path to BAM file>>
+
+Specify a BAM file produced by MiniMap2 with the alignments to be used for
+retrieving SV sequence information.
+(Either a BAM file or a MUMmer-generated delta file is required).
+
 =item B<--delta <path to delta file>>
 
 Specify a delta file produced by MUMmer with the alignments to be used for
 retrieving SV sequence information.  Generally, one would use the same
 filtered delta file that was used to create the "diff" file (see below).
-(Required).
+(Either a BAM file or a MUMmer-generated delta file is required).
 
 =item B<--regions <path to a BED file of regions>>
 
@@ -765,14 +786,16 @@ alignments in the supplied MUMmer alignment file. (Optional).
 =item B<--ref_fasta <path to reference multi-fasta file>>
 
 Specify the path to a multi-fasta file containing the sequences used as 
-reference in the MUMmer alignment.  If not specified on the command line,
+reference in the alignments.  If not specified, and a MUMmer delta
+file path is provided using the --delta option on the command line,
 the script uses the reference path obtained by parsing the delta file's
 first line. (Optional).
 
 =item B<--query_fasta <path to query multi-fasta file>>
 
 Specify the path to a multi-fasta file containing the sequences used as 
-the query in the MUMmer alignment.  If not specified on the command line,
+the query in the alignments.  If not specified, and a MUMmer delta
+file path is provided using the --delta option on the command line,
 the script uses the query path obtained by parsing the delta file's
 first line. (Optional).
 

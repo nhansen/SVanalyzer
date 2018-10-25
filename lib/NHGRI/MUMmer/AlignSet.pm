@@ -180,6 +180,7 @@ sub _parse_delta_file {
                  query_end => $query_end, mismatches => $mismatches, nonposmatches => $nonposmatches,
                  nonalphas => $nonalphas, cigar_string => $cigar_string, ref_entry => $ref_entry,
                  query_entry => $query_entry, comp => $comp };
+            #print "ALIGNMENT\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\t$comp\n";
             if (!$ref_start || !$ref_end) {
                 die "No ref start or ref end for entry pair $self->{entry_pairs}->[$#{$self->{entry_pairs}}]->{ref_entry} and $self->{entry_pairs}->[$#{$self->{entry_pairs}}]->{query_entry}\n";
             }
@@ -404,8 +405,8 @@ sub _extend_exact {
     }
 
     if ($self->{verbose} && ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end)) {
-        print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
-        print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
+        #print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
+        #print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
     }
     else {
         #print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";

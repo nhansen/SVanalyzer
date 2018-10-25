@@ -42,11 +42,11 @@ our $VERSION  = '0.01';
   This method creates a Align2SV object from a set of
   alignment coordinates and other variables.
 
-  Input:  -delta_obj - NHGRI::MUMmer::AlignSet object 
+  Input:  -alignset_obj - NHGRI::MUMmer::AlignSet object 
           containing alignments of alternate to reference
           sequences.
-          -left_align - alignment hash from delta file
-          -right_align - alignment hash from delta file
+          -left_align - alignment hash from left side of break
+          -right_align - alignment hash from right side of break
 
   Output: New Align2SV object
 
@@ -56,11 +56,11 @@ our $VERSION  = '0.01';
 sub new {
     my $class = shift;
     my %params = @_;
-    my $delta_obj = $params{-delta_obj};
+    my $alignset_obj = $params{-alignset_obj};
     my $rh_left_align = $params{-left_align};
     my $rh_right_align = $params{-right_align};
 
-    my $self = { delta_obj => $delta_obj,
+    my $self = { alignset_obj => $alignset_obj,
                  left_align => $rh_left_align,
                  right_align => $rh_right_align,
                   };
@@ -69,8 +69,8 @@ sub new {
         die "Two references to hashes of alignment info must be passed as -left_align and -right_align to the NHGRI::SVanalyzer::Align2SV constructor!\n";
     }
 
-    if ((!$delta_obj) || (ref($delta_obj) ne 'NHGRI::MUMmer::AlignSet')) {
-        die "A NHGRI::MUMmer::AlignSet object must be passed to NHGRI::SVanalyzer::Align2SV constructor as -delta_obj!\n";
+    if ((!$alignset_obj) || ((ref($alignset_obj) ne 'NHGRI::MUMmer::AlignSet') && ref($alignset_obj) ne 'NHGRI::MiniMap2::AlignSet')) {
+        die "A NHGRI::MUMmer::AlignSet or NHGRI::MiniMap2::AlignSet object must be passed to NHGRI::SVanalyzer::Align2SV constructor as -alignset_obj!\n";
     }
 
     bless $self, $class;
@@ -105,8 +105,8 @@ sub widen_insertion {
     my $query2 = $self->{query2};
 
     my $chrom = $left_align->{ref_entry};
-    $self->{delta_obj}->find_query_coords_from_ref_coord($ref1, $chrom);
-    $self->{delta_obj}->find_query_coords_from_ref_coord($ref2, $chrom);
+    $self->{alignset_obj}->find_query_coords_from_ref_coord($ref1, $chrom);
+    $self->{alignset_obj}->find_query_coords_from_ref_coord($ref2, $chrom);
 
     if (!$left_align->{query_matches}->{$ref1} || $query1 != $left_align->{query_matches}->{$ref1}) {
         die "QUERY1 $query1 doesn\'t match $left_align->{query_matches}->{$ref1}\n";
@@ -159,8 +159,8 @@ sub widen_deletion {
     my $query2 = $self->{query2};
 
     my $contig = $left_align->{query_entry};
-    $self->{delta_obj}->find_ref_coords_from_query_coord($query1, $contig);
-    $self->{delta_obj}->find_ref_coords_from_query_coord($query2, $contig);
+    $self->{alignset_obj}->find_ref_coords_from_query_coord($query1, $contig);
+    $self->{alignset_obj}->find_ref_coords_from_query_coord($query2, $contig);
 
     if (!$left_align->{ref_matches}->{$query1} || $ref1 != $left_align->{ref_matches}->{$query1}) {
         die "REF1 $ref1 doesn\'t match $left_align->{ref_matches}->{$query1}\n";

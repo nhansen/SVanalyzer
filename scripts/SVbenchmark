@@ -60,6 +60,7 @@ if ($include_bed) {
 }
 
 my $max_distance = $Opt{'max_dist'};
+my $min_size = $Opt{'min_size'};
 my $relshift = $Opt{'relshift'};
 my $relsizediff = $Opt{'relsizediff'};
 my $reldist = $Opt{'reldist'};
@@ -78,6 +79,8 @@ else {
     $rh_distance_matrix = calculate_distance_matrix($test_vcf, $truth_vcf, $include_bed);
 }
 
+print "Finished with distances\n";
+
 write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $output_fh, $prefix );
 
 #------------
@@ -87,7 +90,7 @@ write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $
 sub process_commandline {
     # Set defaults here
     %Opt = ( max_dist => 100000, workdir => '.', prefix => 'benchmark', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i prefix=s includebed=s distance_file=s workdir=s relshift=f relsizediff=f reldist=f manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i min_size=i prefix=s includebed=s distance_file=s workdir=s relshift=f relsizediff=f reldist=f manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -124,8 +127,13 @@ sub calculate_distance_matrix {
 
     my %distances = (); # hash of distance arrays for pairs of ids
 
+    my ($current_test_id, $current_truth_id) = (1, 1);
     while (my $rh_testsv = retrieve_next_sorted_sv($test_sortedvcf_fh)) {
-   
+  
+        if (!($rh_testsv->{id}) || ($rh_testsv->{id} eq '.') ) { # assign sequential
+            $rh_testsv->{id} = "testsv_".$current_test_id;
+            $current_test_id++;
+        } 
         my $test_chrom = $rh_testsv->{chrom}; 
         my $test_pos = $rh_testsv->{pos}; 
         next if (!($test_chrom));
@@ -148,6 +156,10 @@ sub calculate_distance_matrix {
         while (1) {
             my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh);
             last if (!$rh_nexttruesv);
+            if (!($rh_nexttruesv->{id}) || ($rh_nexttruesv->{id} eq '.') ) { # assign sequential
+                $rh_nexttruesv->{id} = "truesv_".$current_truth_id;
+                $current_truth_id++;
+            } 
             my $truth_chrom = $rh_nexttruesv->{chrom}; 
             my $truth_pos = $rh_nexttruesv->{pos}; 
             next if (!($truth_chrom));
@@ -269,6 +281,7 @@ sub write_fp_fn_variants {
            $no_detectedtruepositives) = (0, 0, 0, 0);
     my $rh_truepositive_truth_ids = {};
 
+    print "Opening falsepositive file\n";
     my $fp_fh = Open("$prefix.falsepositives.vcf", "w");
 
     # find fp's, fn's:
@@ -279,6 +292,7 @@ sub write_fp_fn_variants {
                        "grep -v \'#\' $test_vcf | ");
     my $test_vcf_fh = Open("$test_command");
 
+    my ($current_test_id, $current_truth_id) = (1, 1);
     while (<$test_vcf_fh>) {
         if (/^#/) { # header line--print to fp file:
             print $fp_fh $_;
@@ -288,20 +302,25 @@ sub write_fp_fn_variants {
             chomp;
             my @fields = split /\t/, $_;
             my $test_id = $fields[2];
+            if ($test_id eq '.') {
+                $test_id = "testsv_".$current_test_id;
+                $current_test_id++;
+            }
             my @matched_ids = ($rh_distances->{$test_id}) ?
                                keys %{$rh_distances->{$test_id}} : ();
             my @true_positives = ();
             foreach my $truth_id (@matched_ids) {
                 my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
-                if ($matchdistances[0] <= $relshift &&
-                    $matchdistances[1] <= $relsizediff &&
-                    $matchdistances[2] <= $reldist) { # found a match--TP!
+                if ($matchdistances[1] <= $relshift &&
+                    $matchdistances[2] <= $relsizediff &&
+                    $matchdistances[3] <= $reldist) { # found a match--TP!
                     push @true_positives, $truth_id;
                     push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
                 }
             }
 
             my $no_tps = @true_positives;
+            #if (!($no_tps) && (!$min_size || ($testsize > $min_size) ) ) { # no match--FP!
             if (!($no_tps)) { # no match--FP!
                 print $fp_fh $vcf_line;
                 $no_falsepositives++;
@@ -335,6 +354,10 @@ sub write_fp_fn_variants {
             chomp;
             my @fields = split /\t/, $_;
             my $truth_id = $fields[2];
+            if ($truth_id eq '.') {
+                $truth_id = "truesv_".$current_truth_id;
+                $current_truth_id++;
+            }
             my @test_matches = ($rh_truepositive_truth_ids->{$truth_id}) ? 
                               @{$rh_truepositive_truth_ids->{$truth_id}} : ();
             my $no_test_matches = @test_matches;

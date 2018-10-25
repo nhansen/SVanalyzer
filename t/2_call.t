@@ -88,7 +88,7 @@ SKIP: {
     mkdir "t/test";
     system("perl -w -I blib/lib $script --test t/benchmark.test.vcf --truth t/benchmark.truth.vcf --prefix t/benchmark --ref t/hs37d5_1start.fa --workdir t/test > t/test5.out 2>&1");
     $out = `grep 'Precision' t/benchmark.report | awk '{print \$NF}'`;
-    like $out, qr/16.00/, "$script precision";
+    like $out, qr/20.00/, "$script precision";
     #system("rm t/benchmark.distances");
     #system("rm t/test5.out");
 }

@@ -246,7 +246,7 @@ sub process_variant {
 
         if (@end_aligns == 2) { # simple SV found
             my $align2sv_obj = NHGRI::SVanalyzer::Align2SV->new(
-                                  -delta_obj => $delta_obj,
+                                  -alignset_obj => $delta_obj,
                                   -left_align => $end_aligns[0], 
                                   -right_align => $end_aligns[1]
                                );
