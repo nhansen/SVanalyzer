@@ -59,11 +59,11 @@ if ($include_bed) {
     }
 }
 
-my $max_distance = $Opt{'max_dist'};
-my $min_size = $Opt{'min_size'};
-my $relshift = $Opt{'relshift'};
-my $relsizediff = $Opt{'relsizediff'};
-my $reldist = $Opt{'reldist'};
+my $max_distance = $Opt{'maxdist'};
+my $min_size = $Opt{'minsize'};
+my $normshift = $Opt{'normshift'};
+my $normsizediff = $Opt{'normsizediff'};
+my $normdist = $Opt{'normdist'};
 
 my $prefix = $Opt{'prefix'};
 my $output_file = "$prefix.report";
@@ -89,8 +89,8 @@ write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( max_dist => 100000, workdir => '.', prefix => 'benchmark', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s max_dist=i min_size=i prefix=s includebed=s distance_file=s workdir=s relshift=f relsizediff=f reldist=f manual help+ version)) || pod2usage(0);
+    %Opt = ( maxdist => 100000, workdir => '.', prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s workdir=s normshift=f normsizediff=f normdist=f manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -311,9 +311,9 @@ sub write_fp_fn_variants {
             my @true_positives = ();
             foreach my $truth_id (@matched_ids) {
                 my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
-                if ($matchdistances[1] <= $relshift &&
-                    $matchdistances[2] <= $relsizediff &&
-                    $matchdistances[3] <= $reldist) { # found a match--TP!
+                if ($matchdistances[1] <= $normshift &&
+                    $matchdistances[2] <= $normsizediff &&
+                    $matchdistances[3] <= $normdist) { # found a match--TP!
                     push @true_positives, $truth_id;
                     push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
                 }
