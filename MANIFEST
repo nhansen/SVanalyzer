@@ -11,6 +11,7 @@ scripts/delta2sam.pl
 lib/GTB/FASTA.pm
 lib/GTB/File.pm
 lib/NHGRI/MUMmer/AlignSet.pm
+lib/NHGRI/MiniMap2/AlignSet.pm
 lib/NHGRI/SVanalyzer/Comp.pm
 lib/NISC/Sequencing/Date.pm
 t/1_load.t
