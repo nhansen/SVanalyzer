@@ -22,7 +22,7 @@ my $out;
 my $script = 'blib/script/SVrefine';
 
 SKIP: {
-    ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 3;
+    ($has_samtools) or skip "Skipping SVrefine tests because no samtools in path", 4;
 
     system("perl -w -I blib/lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --includeseqs --maxsize 1000000 > t/refine.out 2>&1");
     $out = `grep '#' t/refined.vcf | wc -l`;
@@ -69,7 +69,7 @@ SKIP: {
 
 SKIP: {
     # Test SVcomp:
-    ($has_samtools && $has_edlib) or skip "Skipping SVcomp tests because one of samtools or edlib-aligner is missing from path", 2;
+    ($has_samtools && $has_edlib) or skip "Skipping SVcomp tests because one of samtools or edlib-aligner is missing from path", 1;
     $script = 'blib/script/SVcomp';
     
     mkdir "t/test";
@@ -98,7 +98,7 @@ SKIP: {
 
 SKIP: {
     # Test svanalyzer launch script, using SVcomp:
-    ($has_samtools && $has_edlib) or skip "Skipping svanalyzer tests because one of samtools or edlib-aligner is missing from path", 2;
+    ($has_samtools && $has_edlib) or skip "Skipping svanalyzer tests because one of samtools or edlib-aligner is missing from path", 1;
     $script = 'blib/script/svanalyzer';
     
     mkdir "t/test";
