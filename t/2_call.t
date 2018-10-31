@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 11;
+plan tests => 12;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -89,9 +89,13 @@ SKIP: {
     system("perl -w -I blib/lib $script --test t/benchmark.test.vcf --truth t/benchmark.truth.vcf --prefix t/benchmark --ref t/hs37d5_1start.fa --workdir t/test > t/test5.out 2>&1");
     $out = `grep 'Precision' t/benchmark.report | awk '{print \$NF}'`;
     like $out, qr/20.00/, "$script precision";
+    system("perl -w -I blib/lib $script --test t/benchmark.test.vcf --truth t/benchmark.truth.vcf --minsize 10000 --prefix t/benchmark.minsize --ref t/hs37d5_1start.fa --workdir t/test > t/test5.out 2>&1");
+    $out = `grep 'Precision' t/benchmark.minsize.report | awk '{print \$NF}'`;
+    like $out, qr/0.00/, "$script precision";
     #system("rm t/benchmark.distances");
     #system("rm t/test5.out");
 }
+
 SKIP: {
     # Test svanalyzer launch script, using SVcomp:
     ($has_samtools && $has_edlib) or skip "Skipping svanalyzer tests because one of samtools or edlib-aligner is missing from path", 2;

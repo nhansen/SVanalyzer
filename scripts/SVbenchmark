@@ -306,32 +306,34 @@ sub write_fp_fn_variants {
                 $test_id = "testsv_".$current_test_id;
                 $current_test_id++;
             }
-            my @matched_ids = ($rh_distances->{$test_id}) ?
-                               keys %{$rh_distances->{$test_id}} : ();
-            my @true_positives = ();
-            foreach my $truth_id (@matched_ids) {
-                my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
-                if ($matchdistances[1] <= $normshift &&
-                    $matchdistances[2] <= $normsizediff &&
-                    $matchdistances[3] <= $normdist) { # found a match--TP!
-                    push @true_positives, $truth_id;
-                    push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+            my $testsize = retrieve_variant_size(@fields);
+            if (!($min_size) || ($testsize > $min_size) ) { # Tested prediction
+                my @matched_ids = ($rh_distances->{$test_id}) ?
+                                   keys %{$rh_distances->{$test_id}} : ();
+                my @true_positives = ();
+                foreach my $truth_id (@matched_ids) {
+                    my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
+                    if ($matchdistances[1] <= $normshift &&
+                        $matchdistances[2] <= $normsizediff &&
+                        $matchdistances[3] <= $normdist) { # found a match--TP!
+                        push @true_positives, $truth_id;
+                        push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+                    }
                 }
-            }
-
-            my $no_tps = @true_positives;
-            #if (!($no_tps) && (!$min_size || ($testsize > $min_size) ) ) { # no match--FP!
-            if (!($no_tps)) { # no match--FP!
-                print $fp_fh $vcf_line;
-                $no_falsepositives++;
-            }
-            elsif ($no_tps > 1) { # potential duplicates
-                my $truth_ids = join ',', @true_positives;
-                print STDERR "More than one match for $test_id: $truth_ids. Does your truth file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
-            }
-
-            if ($no_tps) {
-                $no_truepositives++;
+    
+                my $no_tps = @true_positives;
+                if (!($no_tps)) { # no match--FP!
+                    print $fp_fh $vcf_line;
+                    $no_falsepositives++;
+                }
+                elsif ($no_tps > 1) { # potential duplicates
+                    my $truth_ids = join ',', @true_positives;
+                    print STDERR "More than one match for $test_id: $truth_ids. Does your truth file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+                }
+    
+                if ($no_tps) {
+                    $no_truepositives++;
+                }
             }
         }
     }
@@ -358,21 +360,26 @@ sub write_fp_fn_variants {
                 $truth_id = "truesv_".$current_truth_id;
                 $current_truth_id++;
             }
-            my @test_matches = ($rh_truepositive_truth_ids->{$truth_id}) ? 
-                              @{$rh_truepositive_truth_ids->{$truth_id}} : ();
-            my $no_test_matches = @test_matches;
+            
+            my $truesize = retrieve_variant_size(@fields);
 
-            if (!($no_test_matches)) { # missed--FN!
-                print $fn_fh $vcf_line;
-                $no_falsenegatives++;
-            }
-            elsif ($no_test_matches > 1) {
-                my $test_ids = join ',', @test_matches;
-                print STDERR "More than one match for $truth_id: $test_ids. Does your test file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
-            }
+            if (!($min_size) || ($truesize >= $min_size)) { # true variant
+                my @test_matches = ($rh_truepositive_truth_ids->{$truth_id}) ? 
+                                  @{$rh_truepositive_truth_ids->{$truth_id}} : ();
+                my $no_test_matches = @test_matches;
+    
+                if (!($no_test_matches)) { # missed--FN!
+                    print $fn_fh $vcf_line;
+                    $no_falsenegatives++;
+                }
+                elsif ($no_test_matches > 1) {
+                    my $test_ids = join ',', @test_matches;
+                    print STDERR "More than one match for $truth_id: $test_ids. Does your test file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+                }
 
-            if ($no_test_matches) {
-                $no_detectedtruepositives++;
+                if ($no_test_matches) {
+                    $no_detectedtruepositives++;
+                }
             }
         }
     }
@@ -383,19 +390,41 @@ sub write_fp_fn_variants {
     print $output_fh "RECALL:\n";
     print $output_fh "Number of detected true variants (DTP): $no_detectedtruepositives\n";
     print $output_fh "Number of undetected true variants (FN): $no_falsenegatives\n";
-    my $recallval = $no_detectedtruepositives/($no_detectedtruepositives+$no_falsenegatives);
-    my $recall = sprintf("%5.2f", 100*$recallval);
+    my $recallval = ($no_detectedtruepositives + $no_falsenegatives) ? $no_detectedtruepositives/($no_detectedtruepositives+$no_falsenegatives) : 'NA';
+    my $recall = ($recallval eq 'NA' ) ? $recallval : sprintf("%5.2f", 100*$recallval);
     print $output_fh "Recall (DTP/(DTP+FN)): $recall\%\n";
     print $output_fh "\n";
     print $output_fh "PRECISION:\n";
     print $output_fh "Number of predictions that are true (PTP): $no_truepositives\n";
     print $output_fh "Number of false positives (FP): $no_falsepositives\n";
-    my $precisionval = $no_truepositives/($no_truepositives+$no_falsepositives);
-    my $precision = sprintf("%5.2f", 100*$precisionval);
+    my $precisionval = ($no_truepositives+$no_falsepositives) ? $no_truepositives/($no_truepositives+$no_falsepositives) : 'NA';
+    my $precision = ($precisionval eq 'NA' ) ? $precisionval : sprintf("%5.2f", 100*$precisionval);
     print $output_fh "Precision (PTP/(PTP+FP)): $precision\%\n";
     print $output_fh "\n";
-    my $f1score = 2*$recallval*$precisionval/($recallval+$precisionval);
+    my $f1score = ($recallval ne 'NA' && $precisionval ne 'NA' && $recallval + $precisionval > 0) ? 2*$recallval*$precisionval/($recallval+$precisionval) : 'NA';
     print $output_fh "F1 (2*Recall*Precision/(Recall+Precision): $f1score\n";
+}
+
+sub retrieve_variant_size {
+    my @vcf_fields = @_;
+
+    my $varsize;
+
+    if ($vcf_fields[7] =~ /SVLEN=\-{0,1}(\d+)/) { # use SVLEN tag if present
+        $varsize = $1;
+    }
+    elsif ($vcf_fields[3] ne '.' && $vcf_fields[4] ne '.') { # use lengths of alleles
+        my $reflength = length($vcf_fields[3]);
+        my $altlength = length($vcf_fields[4]);
+        $varsize = ($reflength > $altlength) ? $reflength - $altlength : $altlength - $reflength;
+    }
+    else {
+        $varsize = 0;
+        print STDERR "Unable to determine variant size for variant at $vcf_fields[0]:$vcf_fields[1]\n";
+    }
+
+    return $varsize;
+
 }
 
 __END__
