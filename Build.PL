@@ -4,7 +4,7 @@ use Module::Build;
 
 my $build = Module::Build->new(
         module_name   => 'SVanalyzer',
-        dist_version  => 0.22,
+        dist_version  => 0.25,
         dist_author   => 'NHGRI Perl Programmers',
         dist_abstract => 'Package for analyzing structural variation in sequence data',
         license       => 'perl',
