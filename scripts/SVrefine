@@ -19,7 +19,7 @@ our %Opt;
 
 =head1 NAME
 
-SVrefine - Read regions from a BED file and use MUMmer alignments of an assembly to the reference to refine structural variants in those regions and print them out in VCF format.
+SVrefine - Read regions from a BED file and use MUMmer or minimap2 alignments of an assembly or reads to the reference to refine structural variants in those regions and print them out in VCF format.
 
 =head1 SYNOPSIS
 
@@ -37,51 +37,11 @@ For complete documentation, run C<SVrefine -man>
 
 process_commandline();
 
-my $query_fasta = $Opt{query_fasta}; # will use values from delta file if not supplied as arguments
-my $ref_fasta = $Opt{ref_fasta}; # will use values from delta file if not supplied as arguments
-
-$ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta && $ref_fasta !~ m:^/:);
-$query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta && $query_fasta !~ m:^/:);
-
-my $delta_file = $Opt{delta};
-my $bam_file = $Opt{bam};
-
 my $regions_file = $Opt{regions};
-
 my $samplename = $Opt{samplename};
 
-my $outvcf = $Opt{outvcf};
-my $outvcf_fh = Open($outvcf, "w");
-
-my $refbedfile = $Opt{outref}; # file to write coverage that agrees with reference
-my $refregions_fh = Open($refbedfile, "w"); # will write regions with support for reference sequence across inquiry regions to bed formatted file 
-
-my $nocovbedfile = $Opt{nocov}; # file to write regions with no coverage in the assembly
-my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no coverage to bed formatted file 
-
-my $svregionsfile = $Opt{svregions}; # file to write widened SV regions
-my $svregions_fh = Open($svregionsfile, "w") if ($svregionsfile); # will write widened SV regions to bed formatted file 
-
-my $alignset_obj = ($delta_file) ? NHGRI::MUMmer::AlignSet->new(
-                                                   -delta_file => $delta_file,
-                                                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
-                                                   -storequeryentrypairs => 1,
-                                                   -extend_exact => 1,
-                                                   -reference_file => $ref_fasta,
-                                                   -query_file => $query_fasta ) :
-                                   NHGRI::MiniMap2::AlignSet->new(
-                                                   -bam_file => $bam_file,
-                                                   -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
-                                                   -storequeryentrypairs => 1,
-                                                   -reference_file => $ref_fasta,
-                                                   -query_file => $query_fasta);
-
-# set up assembly FASTA objects:
-$ref_fasta = $alignset_obj->{reference_file} if (!$ref_fasta);
-$query_fasta = $alignset_obj->{query_file} if (!$query_fasta);
-
-my $ref_db = GTB::FASTA->new($ref_fasta);
-my $query_db = GTB::FASTA->new($query_fasta);
+my ($outvcf_fh, $refregions_fh, $nocovregions_fh, $svregions_fh) = open_files_for_writing();
+my ($ref_db, $query_db, $alignset_obj) = read_alignments();
 
 my @ref_entries = $ref_db->ids(); # ordered as in fasta index
 my $rh_regions = ($regions_file) ? read_regions_file($regions_file) :
@@ -147,6 +107,58 @@ sub process_commandline {
     }
 }
 
+sub read_alignments {
+
+    my $query_fasta = $Opt{query_fasta}; # will use values from delta or minimap2 bamfile if not supplied as arguments
+    my $ref_fasta = $Opt{ref_fasta}; # will use values from delta or minimap2 bamfile if not supplied as arguments
+    
+    my $delta_file = $Opt{delta};
+    my $bam_file = $Opt{bam};
+
+    my $alignset_obj = ($delta_file) ? NHGRI::MUMmer::AlignSet->new(
+                                                       -delta_file => $delta_file,
+                                                       -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
+                                                       -storequeryentrypairs => 1,
+                                                       -extend_exact => 1,
+                                                       -reference_file => $ref_fasta,
+                                                       -query_file => $query_fasta ) :
+                                       NHGRI::MiniMap2::AlignSet->new(
+                                                       -bam_file => $bam_file,
+                                                       -storerefentrypairs => 1, # object stores hash of each ref/query entry's align pairs (or "edges")
+                                                       -storequeryentrypairs => 1,
+                                                       -reference_file => $ref_fasta,
+                                                       -query_file => $query_fasta);
+    
+    # set up assembly FASTA objects:
+    $ref_fasta = $alignset_obj->{reference_file} if (!$ref_fasta);
+    $query_fasta = $alignset_obj->{query_file} if (!$query_fasta);
+    
+    $ref_fasta = $ENV{'PWD'}."/".$ref_fasta if ($ref_fasta && $ref_fasta !~ m:^/:);
+    $query_fasta = $ENV{'PWD'}."/".$query_fasta if ($query_fasta && $query_fasta !~ m:^/:);
+    
+    my $ref_db = GTB::FASTA->new($ref_fasta);
+    my $query_db = GTB::FASTA->new($query_fasta);
+
+    return ($ref_db, $query_db, $alignset_obj);
+}
+
+sub open_files_for_writing {
+
+    my $outvcf = $Opt{outvcf};
+    my $outvcf_fh = Open($outvcf, "w");
+    
+    my $refbedfile = $Opt{outref}; # file to write coverage that agrees with reference
+    my $refregions_fh = Open($refbedfile, "w"); # will write regions with support for reference sequence across inquiry regions to bed formatted file 
+    
+    my $nocovbedfile = $Opt{nocov}; # file to write regions with no coverage in the assembly
+    my $nocovregions_fh = Open($nocovbedfile, "w"); # will write regions with no coverage to bed formatted file 
+    
+    my $svregionsfile = $Opt{svregions}; # file to write widened SV regions
+    my $svregions_fh = Open($svregionsfile, "w") if ($svregionsfile); # will write widened SV regions to bed formatted file 
+
+    return ($outvcf_fh, $refregions_fh, $nocovregions_fh, $svregions_fh);
+}
+    
 sub read_regions_file {
     my $regions_file = shift;
 
@@ -251,10 +263,8 @@ sub process_region {
 
     # examine regions for broken alignments:
 
-    my $rh_ref_entrypairs = $alignset_obj->{refentrypairs}; # store entry pairs by ref entry for quick retrieval
     my $rh_query_entrypairs = $alignset_obj->{queryentrypairs}; # store entry pairs by query entry for quick retrieval
-
-    my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
+    my $ra_rentry_pairs = $alignset_obj->{refentrypairs}->{$chrom}; # everything aligning to this chromosome
 
     foreach my $ra_region (@{$ra_regions}) {
         my ($start, $end) = @{$ra_region};
@@ -281,7 +291,6 @@ sub process_region {
         }
         
         my @aligned_contigs = map { $_->{query_entry} } @valid_entry_pairs;
-        my $contig_string = join ':', @aligned_contigs;
         my $no_entry_pairs = @valid_entry_pairs;
         print "REGION $regionstring ENTRYPAIRS $no_entry_pairs\n" if ($Opt{verbose});
 
@@ -313,8 +322,9 @@ sub process_region {
                     $nonref_found = 1;
                 }
             }
+
             if (!$nonref_found) {
-                print "REGION $regionstring NOVARFOUND\n" if ($Opt{verbose});
+                print "REGION $contig $regionstring NOVARFOUND\n" if ($Opt{verbose});
                 next;
             }
 

@@ -136,7 +136,7 @@ sub _parse_bam_file {
         my ($query_entry, $flag, $ref_entry, $refpos, $mapq, $cigar_string, $matename, $mpos, $isize, $seq, $qual, $opt) = split /\t/, $_;
         next if ($cigar_string eq '*'); # skip unaligned
         my $comp = ( $flag & 16 ) ? 1 : 0;
-        my ($ref_start, $ref_end, $query_start, $query_end) = $self->_get_ref_query_positions($ref_entry, $query_entry, $refpos, $comp, $cigar_string);
+        my $ra_align_endpoints = $self->_get_ref_query_positions($ref_entry, $query_entry, $refpos, $comp, $cigar_string);
 
         my $ref_length = $reference_db->len($ref_entry);
         my $query_length = $query_db->len($query_entry);
@@ -147,14 +147,18 @@ sub _parse_bam_file {
             $entry_pair = $self->{entry_pairs}->[$#{$self->{entry_pairs}}];
         }
 
-        push @{$entry_pair->{aligns}}, 
+        foreach my $ra_align (@{$ra_align_endpoints}) {
+            my ($ref_start, $ref_end, $query_start, $query_end) = @{$ra_align};
+
+            push @{$entry_pair->{aligns}}, 
                 {ref_start => $ref_start, ref_end => $ref_end, query_start => $query_start,
                  query_end => $query_end, cigar_string => $cigar_string, ref_entry => $ref_entry,
                  # could eventually try to parse these values out of minimap2 alignments, but not now
                  # mismatches => $mismatches, nonposmatches => $nonposmatches, nonalphas => $nonalphas,
                  query_entry => $query_entry, comp => $comp };
 
-        print "ALIGNMENT\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\t$comp\n";
+            print "ALIGNMENT\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\t$comp\n" if ($self->{verbose});
+        }
 
         $readcount++;
         #last if ($readcount > 10000);
@@ -190,7 +194,8 @@ sub _parse_bam_file {
   parameters of a SAM-formatted alignment.
 
   Input: Object, ref entry, query entry, reference position, comp, cigar
-  Output: ref start, ref end, query start, query end
+  Output: Reference to a list of refs to arrays of (ref start, ref end,
+          query start, query end)
 
 =cut
 
@@ -211,6 +216,7 @@ sub _get_ref_query_positions {
     $ref_start = $ref_pos;
     $query_start = ($comp) ? $query_db->len($query_entry) : 1;
 
+    my @starts_ends = ();
     my ($current_ref, $current_query) = ($ref_start, $query_start);
     my $first_op = 1; # advance start for soft clipping if first operation
     while ($cigar_string) {
@@ -252,7 +258,9 @@ sub _get_ref_query_positions {
     print "SAM $ref_entry/$query_entry $ref_pos comp $comp\n";
     print "YIELDS $ref_start-$ref_end $query_start-$query_end\n";
 
-    return ($ref_start, $ref_end, $query_start, $query_end);
+    push @starts_ends, [$ref_start, $ref_end, $query_start, $query_end];
+
+    return [@starts_ends];
 
 } # end _get_ref_query_positions
 
@@ -290,13 +298,10 @@ sub find_ref_coords_from_query_coord {
             my $query_start = $rh_align->{query_start};
             my $query_end = $rh_align->{query_end};
             my $comp = ($query_start <= $query_end) ? 0 : 1;
-            #print STDERR "Searching for $query_pos in align $query:$query_start-$query_end, ref $ref_start-$ref_end\n";
             if (!$comp && ($query_pos < $query_start || $query_pos > $query_end)) {
-                #print "$query_pos is not between $query_start and $query_end!\n";
                 next;
             }
             elsif ($comp && ($query_pos > $query_start || $query_pos < $query_end)) {
-                #print "$query_pos is not between $query_start and $query_end!\n";
                 next;
             }
 
@@ -339,7 +344,7 @@ sub find_ref_coords_from_query_coord {
                             $rh_align->{ref_matches}->{$query_pos} = $current_ref;
                             $match_found = 1;
                             $align_match_found = 1;
-                            #print STDERR "Setting ref_match within insertion to $current_ref\n";
+                            print STDERR "Setting ref_match within insertion to $current_ref\n" if ($self->{verbose});
                             last;
                         }
                     }
@@ -361,7 +366,7 @@ sub find_ref_coords_from_query_coord {
                 }
             }
             if (!$align_match_found) { # check to be sure we got to the end
-                print STDERR "Reached query $current_query (end is $query_end), ref $current_ref (end is $ref_end) without finding match\n";
+                print STDERR "Reached query $current_query (end is $query_end), ref $current_ref (end is $ref_end) without finding match\n" if ($self->{verbose});
             }
             else {
                 #print STDERR "Found match: $rh_align->{ref_matches}->{$query_pos}\n";
@@ -393,7 +398,6 @@ sub find_query_coords_from_ref_coord {
     my $ref = shift;
     my $rh_params = shift; # not used yet
 
-    #print "In find_query_coords!\n";
     foreach my $rh_pairentry (@{$self->{entry_pairs}}) {
         next if ($ref && $rh_pairentry->{ref_entry} ne $ref);
 
@@ -404,7 +408,6 @@ sub find_query_coords_from_ref_coord {
             my $ref_end = $rh_align->{ref_end};
             my $comp = ($query_start < $query_end) ? 0 : 1;
             if (($ref_pos < $ref_start) || ($ref_pos > $ref_end)) {
-                #print "$ref_pos is not between $ref_start and $ref_end!\n";
                 next;
             }
 
@@ -421,7 +424,6 @@ sub find_query_coords_from_ref_coord {
                     if ($op eq 'M') {
                         if ($current_ref + $bases >= $ref_pos) {
                             $rh_align->{query_matches}->{$ref_pos} = ($comp) ? $current_query - ($ref_pos - $current_ref) : $current_query + ($ref_pos - $current_ref);
-                            #print "Value is $rh_align->{query_matches}->{$ref_pos}\n";
                             last;
                         }
                         else {
@@ -528,13 +530,11 @@ sub find_gap_query_coords {
     }
     # Check for gap spanning matches to $ref_entry:$ref1-$ref2
     foreach my $varcontig (keys %found_query_matches) {
-        #print "Checking $varcontig for gap spanning matches to $ref_entry:$ref1-$ref2\n";
         my $query1 = $found_query_matches{$varcontig}->{'query1'};
         my $query2 = $found_query_matches{$varcontig}->{'query2'};
         my $comp1 = $found_query_matches{$varcontig}->{'comp1'};
         my $comp2 = $found_query_matches{$varcontig}->{'comp2'};
         if ($query1 && $query2 && $comp1 && $comp2 && ($comp1 == $comp2)) { # everything's here for this contig
-            #print "Returning $varcontig:$query1-$query2\n";
             return ($varcontig, $query1, $query2, $comp1);
         }
     }

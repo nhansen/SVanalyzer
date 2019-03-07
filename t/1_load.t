@@ -7,7 +7,7 @@ use Module::Build;
 
 # Four scripts to test at this point:
 my @scripts = qw(blib/script/SVrefine blib/script/SVcomp blib/script/SVwiden blib/script/SVmerge blib/script/SVbenchmark);
-my @modules = qw(blib/lib/GTB/FASTA.pm blib/lib/GTB/File.pm blib/lib/NHGRI/MUMmer/AlignSet.pm blib/lib/NHGRI/SVanalyzer/Comp.pm blib/lib/NISC/Sequencing/Date.pm );
+my @modules = qw(blib/lib/GTB/FASTA.pm blib/lib/GTB/File.pm blib/lib/NHGRI/MUMmer/AlignSet.pm blib/lib/NHGRI/MiniMap2/AlignSet.pm blib/lib/NHGRI/SVanalyzer/Comp.pm blib/lib/NISC/Sequencing/Date.pm );
 
 # Direct useless output to STDERR, to avoid confusing Test::Harness
 my $stdin = select STDERR;
