@@ -43,6 +43,12 @@ else {
 process_commandline();
 
 my $ref_fasta = $Opt{ref};
+if ($ref_fasta !~ m/^\//) {
+    $ref_fasta = $ENV{'PWD'}."/$ref_fasta";
+}
+
+my $ref_db = GTB::FASTA->new($ref_fasta);
+
 my $test_vcf = $Opt{test};
 my $truth_vcf = $Opt{truth};
 
@@ -128,7 +134,7 @@ sub calculate_distance_matrix {
     my %distances = (); # hash of distance arrays for pairs of ids
 
     my ($current_test_id, $current_truth_id) = (1, 1);
-    while (my $rh_testsv = retrieve_next_sorted_sv($test_sortedvcf_fh)) {
+    while (my $rh_testsv = retrieve_next_sorted_sv($test_sortedvcf_fh, $ref_db)) {
   
         if (!($rh_testsv->{id}) || ($rh_testsv->{id} eq '.') ) { # assign sequential
             $rh_testsv->{id} = "testsv_".$current_test_id;
@@ -154,7 +160,7 @@ sub calculate_distance_matrix {
         # add new true SVs until beyond current SV's window:
 
         while (1) {
-            my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh);
+            my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh, $ref_db);
             last if (!$rh_nexttruesv);
             if (!($rh_nexttruesv->{id}) || ($rh_nexttruesv->{id} eq '.') ) { # assign sequential
                 $rh_nexttruesv->{id} = "truesv_".$current_truth_id;
@@ -230,6 +236,7 @@ sub read_distance_file {
 
 sub retrieve_next_sorted_sv {
     my $variant_fh = shift;
+    my $ref_db = shift;
 
     my $next_line = <$variant_fh>;
 
@@ -251,6 +258,12 @@ sub retrieve_next_sorted_sv {
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
             return {};
+        }
+        elsif (($alt eq '<DEL>') && ($info =~ /;END=(\d+);{0,1}/ || $info =~ /^END=(\d+);{0,1}/)) { # use end tag
+            my $end = $1;
+            my $smo = $start - 1;
+            $ref = uc($ref_db->seq("$chrom:$smo-$end"));
+            $alt = substr($ref, 0, 1); # first character of reference
         }
         else { # check for END= INFO tag
             warn "Skipping non-ATGC ref or alt:$next_line";
