@@ -30,7 +30,7 @@ or cloning the `github repository <https://github.com/nhansen/SVanalyzer>`_:
 
 ::
 
-  git clone git://github.com/nhansen/SVanalyzer.git
+  git clone https://github.com/nhansen/SVanalyzer.git
 
 After unzipping the tarball or cloning the directory, build SVanalyzer:
 
