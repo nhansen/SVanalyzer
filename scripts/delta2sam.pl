@@ -186,14 +186,7 @@ __END__
 =item B<--delta <path to delta file>>
 
 Specify a delta file produced by MUMmer with the alignments to be used for
-retrieving SV sequence information.  Generally, one would use the same
-filtered delta file that was used to create the "diff" file (see below).
-(Required).
-
-=item B<--diffs <path to diff file>>
-
-Specify a diff file produced by MUMmer's "show-diff" command run with the
--r option on the delta file passed with the --delta option to this program.
+retrieving SV sequence information.
 (Required).
 
 =item B<--ref_fasta <path to reference multi-fasta file>>
