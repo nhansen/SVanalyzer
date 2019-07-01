@@ -12,7 +12,9 @@ are below the specified maximum values.
 The program steps through a set of structural variants, calculating distances to other
 nearby variants by comparing their alternate haplotypes. The program
 then reports clusters of variants, and prints a VCF file of "unique"
-variants.
+variants, where the variant reported in the VCF record is a randomly-chosen
+representative from the largest cluster (or a randomly selected largest
+cluster, in the case of a tie among cluster sizes) of exactly matching variants.
 
 Alternatively, a file of previously-calculated distances can be provided
 with the --distance_file option, and the clustering can be skipped with the option
