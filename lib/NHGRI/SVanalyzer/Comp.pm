@@ -320,7 +320,7 @@ sub compare_alt_haplotypes {
     $self->write_fasta_file($tmpfasta2, "$id2\_alt", $rs_alt2);
 
     my $edlib_aligner = 'edlib-aligner';
-    my $nw_output = `$edlib_aligner $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
+    my $nw_output = `$edlib_aligner  -p -f CIG_STD $tmpfasta1 $tmpfasta2 -p -f CIG_STD`;   
     unlink $tmpfasta1 unless ($params{'-nocleanup'});
     unlink $tmpfasta2 unless ($params{'-nocleanup'});
     if ($nw_output =~ /Cigar:\n(.*)/m) {
