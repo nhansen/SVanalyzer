@@ -22,9 +22,7 @@ SVmerge - group structural variants from one or more VCF files by calculating a 
 
 =head1 DESCRIPTION
 
-The program steps through the specified VCF files, calculating distances to other variants in the files that are nearby by comparing alternate haplotypes. It then reports clusters of variants, and prints a VCF file of unique variants. Alternatively, a file of previously-calculated distances can be provided
-with the --distance_file option, and the clustering can be skipped with the option
---skip_clusters.
+The program steps through the specified VCF files, calculating distances to other variants in the files that are nearby by comparing alternate haplotypes. It then reports clusters of variants, and prints a VCF file of unique variants. Alternatively, a file of previously-calculated distances can be provided with the --distance_file option, and the clustering can be skipped with the option --skip_clusters.
 
 =cut
 
@@ -68,9 +66,10 @@ else {
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = calc_distances($vcf_file, $fof_file);
 }
 
-my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
-
-write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
+if (!$Opt{skip_clusters}) {
+    my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
+    write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
+}
 
 unless ($Opt{nocleanup}) { # delete the working directory
     rmdir $workingdir; 
@@ -82,8 +81,8 @@ unless ($Opt{nocleanup}) { # delete the working directory
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'merged' , relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f nocleanup prefix=s manual help+ version)) || pod2usage(0);
+    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters nocleanup prefix=s manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge, ", q$Revision:$, "\n"; }
@@ -235,7 +234,8 @@ sub calc_distances {
                                                             -sv1_info => $rh_neighborhood_sv,
                                                             -sv2_info => $rh_sv,
                                                             -workdir => $workingdir);
-                if ($comp_obj->potential_match()) {
+                if ((abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos}) <= $max_distance) &&
+                    $comp_obj->potential_match( -relsizediff => $max_relsizediff, -relshift => $max_relshift)) {
                     my $rh_distance_metrics = $comp_obj->calc_distance();
                     my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                     my $max_shift = $rh_distance_metrics->{'max_shift'};
@@ -271,12 +271,12 @@ sub calc_distances {
                         }
                         push @{$node_edges[$index1 - 1]}, $index2 - 1;
                         push @{$node_edges[$index2 - 1]}, $index1 - 1;
+                        my $idlesser = (($id1 cmp $id2) > 0) ? 
+                                         $id2 : $id1;
+                        my $idgreater = (($id1 cmp $id2) > 0) ? 
+                                         $id1 : $id2;
+                        $distances{"$idlesser:$idgreater"} = [$pos_diff, $d1, $d2, $d3];
                     }
-                    my $idlesser = (($id1 cmp $id2) > 0) ? 
-                                     $id2 : $id1;
-                    my $idgreater = (($id1 cmp $id2) > 0) ? 
-                                     $id1 : $id2;
-                    $distances{"$idlesser:$idgreater"} = [$pos_diff, $d1, $d2, $d3];
                 }
             }
     
@@ -449,7 +449,7 @@ sub analyze_cluster {
             my $idlesser = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$j] : $nodes[$i];
             my $idgreater = (($nodes[$i] cmp $nodes[$j]) > 0) ? $nodes[$i] : $nodes[$j];
             if (!$rh_dists->{"$idlesser:$idgreater"}) {
-                print STDERR "Missing distance information for $idlesser:$idgreater!\n";
+                #print STDERR "Missing distance information for $idlesser:$idgreater!\n";
                 next;
             }
             my ($thisposdist, $this_dist1, $this_dist2, $this_dist3) = @{$rh_dists->{"$idlesser:$idgreater"}};

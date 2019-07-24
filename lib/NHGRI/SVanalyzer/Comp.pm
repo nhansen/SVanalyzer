@@ -100,7 +100,9 @@ sub new {
 
   This method 
   
-  Input:  None.
+  Input:  -rel_size_diff - maximum allowable relative size difference
+          -rel_shift - maximum allowable relative shift
+          
   Output: 1 if there is a potential match between the 
           two SV's, 0 otherwise.
 
@@ -111,33 +113,33 @@ sub potential_match {
     my $self  = shift;
     my %params = @_;
 
+    my $relshift = (defined($params{'-relshift'})) ? $params{'-relshift'} : 1.0;
+    my $relsizediff = (defined($params{'-relsizediff'})) ? $params{'-relsizediff'} : 1.0;
+
     my $rh_sv1 = $self->{sv1_info};
     my $rh_sv2 = $self->{sv2_info};
 
-    # First score is the max shift of the alignment divided by the min absolute value SV size
-    # Max shift is greater than the difference in alternate alleles, which is the difference in SV sizes
-
+    my $reflength1 = $rh_sv1->{reflength};
+    my $reflength2 = $rh_sv2->{reflength};
     my $altlength1 = $rh_sv1->{altlength};
     my $altlength2 = $rh_sv2->{altlength};
-    my $minshift = abs($altlength1 - $altlength2);
 
-    my $size1 = $rh_sv1->{size};
-    my $size2 = $rh_sv2->{size};
+    my $size1 = $altlength1 - $reflength1;
+    my $size2 = $altlength2 - $reflength2;
 
-    my $minsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
+    my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
 
-    if ($minshift >= $minsize) {
+    my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
+    my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
+    my $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
+
+    if ((abs($size1 - $size2) > $shared_denominator * $relsizediff) ||
+        (abs($size1 - $size2) > $shared_denominator * $relshift)) {
         return 0;
     }
-    
-    my $pos1 = $rh_sv1->{pos};
-    my $pos2 = $rh_sv2->{pos};
-
-    if (abs($pos2 - $pos1) > 6.0*$minsize) {
-        return 0;
+    else {
+        return 1;
     }
-
-    return 1;
 
 } ## end potential_match
 
@@ -214,7 +216,8 @@ sub calc_distance {
     else {
         # align the alternative haplotypes to each other and evaluate
         my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2);
-        if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
+        #if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
+        if (abs($maxshift) < $minsvsize) {
             my $matchtype = 'NWMATCH';
             print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             return {'edit_distance' => $editdistance,
