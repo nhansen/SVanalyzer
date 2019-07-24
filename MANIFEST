@@ -5,9 +5,9 @@ scripts/SVwiden
 scripts/SVrefine
 scripts/SVbenchmark
 scripts/SVmerge
-scripts/mummer2vcf_SVs.pl
-scripts/delta2bed.pl
-scripts/delta2sam.pl
+scripts/misc/mummer2vcf_SVs.pl
+scripts/misc/delta2bed.pl
+scripts/misc/delta2sam.pl
 lib/GTB/FASTA.pm
 lib/GTB/File.pm
 lib/NHGRI/MUMmer/AlignSet.pm
