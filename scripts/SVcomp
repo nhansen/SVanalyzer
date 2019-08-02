@@ -108,7 +108,7 @@ sub compare_vcf_files {
         my $altlength2 = length($alt2);
     
         if ($chr1 ne $chr2) {
-            print STDERR "DIFFCHROMS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            #print STDERR "DIFFCHROMS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
             $varpairindex++;
             next;
         }
@@ -146,7 +146,7 @@ sub compare_vcf_files {
             print $dist_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n"; 
         }
         else {
-            print STDERR "DIFFLENGTHS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
+            #print STDERR "DIFFLENGTHS\t$id1\t$id2\t$chr1\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n";
         }
         $varpairindex++;
     }
