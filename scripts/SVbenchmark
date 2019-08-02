@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-use Log::Message::Simple qw[msg error debug carp croak cluck confess];
+#use Log::Message::Simple qw[msg error debug carp croak cluck confess];
 
 use GTB::File qw(Open);
 use NHGRI::SVanalyzer::Comp;
@@ -76,9 +76,8 @@ my $normdist = $Opt{'normdist'};
 
 my $prefix = $Opt{'prefix'};
 my $output_file = "$prefix.report";
-my $workdir = $Opt{'workdir'};
 
-msg($commandline, 1); # log command line in all cases
+#msg($commandline, 1); # log command line in all cases
 
 my $output_fh = Open($output_file, "w");
 
@@ -100,8 +99,8 @@ write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( maxdist => 100000, workdir => '.', prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s workdir=s normshift=f normsizediff=f normdist=f manual help+ version verbose)) || pod2usage(0);
+    %Opt = ( maxdist => 100000, prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f manual help+ version verbose)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -186,13 +185,12 @@ sub calculate_distance_matrix {
         foreach my $rh_truesv (@current_neighborhood_true_svs) { 
             my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
                                                         -sv1_info => $rh_testsv,
-                                                        -sv2_info => $rh_truesv,
-                                                        -workdir => $workdir);
+                                                        -sv2_info => $rh_truesv);
             my $pos_diff = abs($rh_testsv->{pos} - $rh_truesv->{pos});
             if (($rh_truesv->{chrom} eq $rh_testsv->{chrom}) && 
                   (abs($rh_testsv->{pos} - $rh_truesv->{pos}) <= $max_distance) &&
                   ($comp_obj->potential_match())) {
-                msg("Comparing $rh_truesv->{chrom} variants distance $pos_diff apart (less than $max_distance)", $Opt{verbose});
+                #msg("Comparing $rh_truesv->{chrom} variants distance $pos_diff apart (less than $max_distance)", $Opt{verbose});
                 my $rh_distance_metrics = $comp_obj->calc_distance();
                 my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                 my $max_shift = $rh_distance_metrics->{'max_shift'};
@@ -453,6 +451,65 @@ __END__
 =head1 OPTIONS
 
 =over 4
+
+=item B<--ref <path to reference FASTA file>>
+
+The fasta file that was used as the reference for the two VCF files being
+compared.
+
+=item B<--test <path to VCF file of test variants>>
+
+The file of variants to be compared to the variants in the truth file.
+
+=item B<--truth <path to VCF file of true variants>>
+
+The file of variants to which the test variants will be compared.
+
+=item B<--maxdist <maximum distance>>
+
+Maximum number of base pairs separating the POS values for two variants to be
+compared. Variants farther than this distance apart will be considered not to
+be matching.
+
+=item B<--minsize <minimum size>>
+
+Minimum size of a variant to be included in a benchmarking comparison. In 
+calculations of recall/sensitivity, this minimum is applied to the size of the
+"true" variant. In calculations of precision, this minimum is applied to the
+size of the test variant.
+
+=item B<--prefix <prefix>>
+
+Prefix to be used in the naming of all output files. A directory name can be
+included (e.g., "myresults/sampleA") so long as the directory already 
+exists.
+
+=item B<--includebed <BED file of regions to include>>
+
+File of regions from which to include variants. Used to filter both test
+and truth variants.
+
+=item B<--testfilter <filter string>>
+
+String that must be included in the test VCF record's "FILTER" field in
+order for a variant to be included in the comparison.
+
+=item B<--truthfilter <filter string>>
+
+String that must be included in the truth VCF record's "FILTER" field in
+order for a variant to be included in the comparison.
+
+=item B<--normshift <normalized shift value>>
+
+Maximum allowable normalized shift between matching test and true variants.
+
+=item B<--normsizediff <normalized size difference>>
+
+Maximum allowable normalized size difference between matching test and true variants.
+
+=item B<--normsizedist <normalized edit distance>>
+
+Maximum allowable normalized edit distance between matching test and true variants.
 
 =item B<--help|--manual>
 

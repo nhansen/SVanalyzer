@@ -55,8 +55,6 @@ our $VERSION  = '0.01';
           first SV call (required)
           -sv2_info - reference to a hash containing the 
           second SV call (required)
-          -workdir - path of a directory to use for writing 
-          temporary files (optional)
 
   Output: New Comp object
 
@@ -70,13 +68,11 @@ sub new {
     my $fasta_db = $params{-ref_db};
     my $rh_sv1 = $params{-sv1_info};
     my $rh_sv2 = $params{-sv2_info};
-    my $workdir = $params{-workdir};
 
     my $self = { ref_fasta => $ref_fasta,
                  fasta_db => $fasta_db,
                  sv1_info => $rh_sv1,
                  sv2_info => $rh_sv2,
-                 workdir => $workdir,
                   };
 
     if ((!$rh_sv1) || (!$rh_sv2)) {
