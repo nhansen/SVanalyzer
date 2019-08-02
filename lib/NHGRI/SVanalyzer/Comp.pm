@@ -197,7 +197,6 @@ sub calc_distance {
     my $althaplength_diff = length(${$rs_alt_hap1}) - length(${$rs_alt_hap2});
 
     if (${$rs_alt_hap1} eq ${$rs_alt_hap2}) { # identical variants
-        print "$id1\t$id2\tEXACTMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\n" if ($self->{verbose});
         my $matchtype = 'EXACTMATCH';
         return {'edit_distance' => 0,
                 'max_shift' => 0,
@@ -215,7 +214,6 @@ sub calc_distance {
         #if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
         if (abs($maxshift) < $minsvsize) {
             my $matchtype = 'NWMATCH';
-            print "$id1\t$id2\tNWMATCH\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
                     'match_type' => $matchtype,
@@ -227,7 +225,6 @@ sub calc_distance {
                     'shared_denominator' => $shared_denominator};
         }
         else {
-            print "$id1\t$id2\tNWFAIL\t$chrom\t$pos1\t$pos2\t$reflength1\t$reflength2\t$altlength1\t$altlength2\t$minhaplength\t$maxshift\t$editdistance\n" if ($self->{verbose});
             my $matchtype = 'NWFAIL';
             return {'edit_distance' => $editdistance,
                     'max_shift' => $maxshift,
