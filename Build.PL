@@ -10,7 +10,7 @@ my $build = Module::Build->new(
         license       => 'perl',
         scripts       => [qw(scripts/SVrefine scripts/SVcomp scripts/SVwiden scripts/SVmerge scripts/SVbenchmark scripts/svanalyzer)],
         configure_requires      => { 'Module::Build' => '0.36' },
-        requires      => { },
+        requires      => { 'Log::Log4perl' => '0.21' },
         );
 if (!(`which samtools 2>/dev/null`)) {
     warn "ERROR: samtools executable is not found.\nSVanalyzer scripts requires "
