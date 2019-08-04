@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-#use Log::Message::Simple qw[msg error debug carp croak cluck confess];
+use Log::Log4perl qw(:easy);
 
 use GTB::File qw(Open);
 use NHGRI::SVanalyzer::Comp;
@@ -80,19 +80,33 @@ my $normdist = $Opt{'normdist'};
 my $prefix = $Opt{'prefix'};
 my $output_file = "$prefix.report";
 
+# set up logging:
+$Opt{'loglevel'} = ($Opt{debug}) ? $DEBUG : 
+                   (($Opt{verbose}) ? $INFO : $WARN);
+
+Log::Log4perl->easy_init( { level => $Opt{'loglevel'},
+                            file => "$prefix.log" } );
+
+WARN($commandline);
+
 my $output_fh = Open($output_file, "w");
 
 my $rh_distance_matrix;
 if ($Opt{'distance_file'}) {
+    WARN("Reading distance file $Opt{'distance_file'}\n");
     $rh_distance_matrix = read_distance_file($Opt{'distance_file'});
+    WARN("Finished reading distance file $Opt{'distance_file'}\n");
 }
 else {
+    WARN("Calculating distances and writing to file $prefix.distances\n");
     $rh_distance_matrix = calculate_distance_matrix($test_vcf, $truth_vcf, $include_bed);
+    WARN("Finished calculating distances\n");
 }
 
-print "Finished with distances\n";
-
+WARN("Calculating recall, precision");
 write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $output_fh, $prefix );
+
+WARN("Done");
 
 #------------
 # End MAIN
@@ -101,7 +115,7 @@ write_fp_fn_variants($rh_distance_matrix, $test_vcf, $truth_vcf, $include_bed, $
 sub process_commandline {
     # Set defaults here
     %Opt = ( maxdist => 100000, prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f manual help+ version verbose)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -233,7 +247,7 @@ sub construct_variant_command {
 
     $command .= "sort -k1,1 -k2,2n | ";
 
-    print "$command\n";
+    INFO("$command");
 
     return $command;
 }
@@ -288,7 +302,7 @@ sub retrieve_next_sorted_sv {
             $alt = substr($ref, 0, 1); # first character of reference
         }
         else { # check for END= INFO tag
-            warn "Skipping non-ATGC ref or alt:$next_line";
+            WARN("Skipping non-ATGC ref or alt record: $next_line");
             return {};
         }
 
@@ -316,15 +330,18 @@ sub write_fp_fn_variants {
            $no_detectedtruepositives) = (0, 0, 0, 0);
     my $rh_truepositive_truth_ids = {};
 
-    print "Opening falsepositive file\n";
+    DEBUG("Opening falsepositive file");
     my $fp_fh = Open("$prefix.falsepositives.vcf", "w");
 
     # find fp's, fn's:
 
     my $test_command = construct_variant_command($test_vcf, $bedfile, $test_filter);
+    DEBUG($test_command);
+
     my $test_vcf_fh = Open("$test_command");
 
     my ($current_test_id, $current_truth_id) = (1, 1);
+    my $duplicates_warned = 1;
     while (<$test_vcf_fh>) {
         if (/^#/) { # header line--print to fp file:
             print $fp_fh $_;
@@ -360,7 +377,8 @@ sub write_fp_fn_variants {
                 }
                 elsif ($no_tps > 1) { # potential duplicates
                     my $truth_ids = join ',', @true_positives;
-                    print STDERR "More than one match for $test_id: $truth_ids. Does your truth file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+                    WARN("More than one match for $test_id: $truth_ids. Does your truth file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file");
+                    $duplicates_warned = 1; 
                 }
     
                 if ($no_tps) {
@@ -375,7 +393,10 @@ sub write_fp_fn_variants {
     my $fn_fh = Open("$prefix.falsenegatives.vcf", "w");
 
     my $truth_command = construct_variant_command($truth_vcf, $bedfile, $truth_filter);
+    DEBUG($truth_command);
+
     my $truth_vcf_fh = Open("$truth_command");
+    $duplicates_warned = 0;
     while (<$truth_vcf_fh>) {
         if (/^#/) { # header line--print to fn file:
             print $fn_fh $_;
@@ -403,7 +424,8 @@ sub write_fp_fn_variants {
                 }
                 elsif ($no_test_matches > 1) {
                     my $test_ids = join ',', @test_matches;
-                    print STDERR "More than one match for $truth_id: $test_ids. Does your test file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file\n";
+                    WARN("More than one match for $truth_id: $test_ids. Does your test file have duplicates? You will get more accurate numbers if you run SVmerge on your VCF file");
+                    $duplicates_warned = 1;
                 }
 
                 if ($no_test_matches) {
@@ -449,7 +471,7 @@ sub retrieve_variant_size {
     }
     else {
         $varsize = 0;
-        print STDERR "Unable to determine variant size for variant at $vcf_fields[0]:$vcf_fields[1]\n";
+        WARN("Unable to determine variant size for variant at $vcf_fields[0]:$vcf_fields[1]");
     }
 
     return $varsize;
