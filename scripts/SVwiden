@@ -5,6 +5,7 @@ use strict;
 
 use Getopt::Long;
 use Pod::Usage;
+use Log::Log4perl qw(:easy);
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NHGRI::MUMmer::AlignSet;
@@ -48,7 +49,21 @@ else {
     chomp $filterdiff;
 }
 
+my $commandline = join " ", @ARGV;
+$commandline = $0." $commandline";
+
 process_commandline();
+
+my $prefix = $Opt{'prefix'};
+
+# set up logging:
+$Opt{'loglevel'} = ($Opt{debug}) ? $DEBUG : 
+                   (($Opt{verbose}) ? $INFO : $WARN);
+
+Log::Log4perl->easy_init( { level => $Opt{'loglevel'},
+                            file => "$prefix.log" } );
+
+WARN($commandline);
 
 my $ref_fasta = $Opt{ref};
 my $ref_db = GTB::FASTA->new($ref_fasta);
@@ -56,11 +71,14 @@ my $ref_db = GTB::FASTA->new($ref_fasta);
 my $invcf = $Opt{variants};
 my $invcf_fh = Open($invcf, "r");
 
-my $outvcf = $Opt{prefix}.".vcf";
+my $outvcf = $prefix.".vcf";
 my $outvcf_fh = Open($outvcf, "w");
+
+WARN("Writing widened variants to $outvcf");
 
 write_header($invcf_fh, $outvcf_fh) if (!$Opt{noheader});
 
+my $variants_processed = 0;
 while (<$invcf_fh>) {
     next if (/^#/);
 
@@ -68,10 +86,15 @@ while (<$invcf_fh>) {
     my ($chr, $pos, $end, $id, $ref, $alt) = parse_vcf_line($vcf_line);
 
     process_variant($chr, $pos, $end, $ref, $alt, $ref_db, $outvcf_fh, $vcf_line);
+    $variants_processed++;
+    if ($variants_processed == 1000*int($variants_processed/1000)) {
+        WARN("$variants_processed variants processed");
+    }
 }
 
 close $invcf_fh;
 close $outvcf_fh;
+WARN("Done");
 
 #------------
 # End MAIN
@@ -80,18 +103,18 @@ close $outvcf_fh;
 sub process_commandline {
     # Set defaults here
     %Opt = ( buffer => 10000, workdir => '.', prefix => 'widened' );
-    GetOptions(\%Opt, qw( variants=s ref=s prefix=s buffer=i noheader workdir=s manual help+ version)) || pod2usage(0);
+    GetOptions(\%Opt, qw( variants=s ref=s prefix=s cleanup buffer=i noheader workdir=s manual help+ version verbose debug )) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVwiden, ", q$Revision:$, "\n"; }
 
     if (!($Opt{variants})) {
-        print STDERR "Must specify a VCF file path of variants to widen with --variants option!\n"; 
+        FATAL("Must specify a VCF file path of variants to widen with --variants option!"); 
         pod2usage(0);
     }
 
     if (!($Opt{ref})) {
-        print STDERR "Must specify a reference FASTA file path with --ref option!\n"; 
+        FATAL("Must specify a reference FASTA file path with --ref option!"); 
         pod2usage(0);
     }
 
@@ -113,6 +136,7 @@ sub parse_vcf_line {
             die "Variants must have sequence alleles in REF and ALT fields!\n";
         }
 
+        INFO("Read variant $chr:$start (id $id)");
         return ($chr, $start, $end, $id, $ref, $alt);
     }
     else {
@@ -171,6 +195,7 @@ sub process_variant {
 
     # construct the ref and alternate alleles for alignment:
 
+    INFO("Processing variant at $chrom:$pos-$end");
     my $chrom_length = $ref_db->len($chrom);
     my $buffer = $Opt{buffer};
     my $left_end = ($pos > $buffer) ? $pos - $buffer : 1;
@@ -182,7 +207,8 @@ sub process_variant {
     # check to be sure we have coords correct:
     my $ref_from_ref = substr($ref_allele, $pos_within_ref_allele - 1, $end - $pos + 1);
     if (uc($ref_from_ref) ne $ref) {
-        die "Ref derived from widened ref has different allele from ref!\n";
+        $ref_from_ref = uc($ref_from_ref);
+        FATAL("Ref derived from widened ref has different allele from ref!");
     }
 
     # construct alternate haplotype:
@@ -221,7 +247,7 @@ sub process_variant {
             my $ref_end = $rh_align->{ref_end};
             my $query_start = $rh_align->{query_start};
             my $query_end = $rh_align->{query_end};
-            #print STDERR "$ref_start\t$query_start\t$ref_end\t$query_end\n";
+            DEBUG("$ref_start\t$query_start\t$ref_end\t$query_end");
             if ($ref_start == 1 && $ref_end == length($ref_allele)) {
                 $end2end_align = $rh_align;
             }
@@ -250,8 +276,8 @@ sub process_variant {
                                   -left_align => $end_aligns[0], 
                                   -right_align => $end_aligns[1]
                                );
-            print STDERR "$end_aligns[0]->{ref_start}\t$end_aligns[0]->{query_start}\t$end_aligns[0]->{ref_end}\t$end_aligns[0]->{query_end}\n";
-            print STDERR "$end_aligns[1]->{ref_start}\t$end_aligns[1]->{query_start}\t$end_aligns[1]->{ref_end}\t$end_aligns[1]->{query_end}\n";
+            INFO("$end_aligns[0]->{ref_start}\t$end_aligns[0]->{query_start}\t$end_aligns[0]->{ref_end}\t$end_aligns[0]->{query_end}");
+            INFO("$end_aligns[1]->{ref_start}\t$end_aligns[1]->{query_start}\t$end_aligns[1]->{ref_end}\t$end_aligns[1]->{query_end}");
             my $comp = $end_aligns[0]->{comp};
             my $svsize = length($alt) - length($ref);
             my @cross_center_aligns; # these alignments help determine repeat unit
@@ -261,8 +287,8 @@ sub process_variant {
                 my $query2 = $align2sv_obj->{query2};
                 my $ref1p = $align2sv_obj->{ref1p};
                 my $ref2p = $align2sv_obj->{ref2p};
-                print STDERR "QUERY LIMITS $query2-$query1\n";
-                print STDERR "REF LIMITS $ref2p-$ref1p\n";
+                DEBUG("QUERY LIMITS $query2-$query1");
+                DEBUG("REF LIMITS $ref2p-$ref1p");
                 @cross_center_aligns = ($comp) ?
                     #### NEED TO CHECK THESE ####
                     grep {(!($_->{ref_start} > $ref1p || $_->{ref_end} < $ref2p)) &&
@@ -278,8 +304,8 @@ sub process_variant {
                 my $query2p = $align2sv_obj->{query2p};
                 my $ref1 = $align2sv_obj->{ref1};
                 my $ref2 = $align2sv_obj->{ref2};
-                print STDERR "QUERY LIMITS $query2p-$query1p\n";
-                print STDERR "REF LIMITS $ref2-$ref1\n";
+                DEBUG("QUERY LIMITS $query2p-$query1p");
+                DEBUG("REF LIMITS $ref2-$ref1");
                 @cross_center_aligns = ($comp) ?
                      grep {!($_->{query_start} > $query2p || $_->{query_end} < $query1p) &&
                            !($_->{ref_end} < $ref2 || $_->{ref_start} > $ref1) }
@@ -293,7 +319,7 @@ sub process_variant {
                 my $ref_end = $rh_align->{ref_end};
                 my $query_start = $rh_align->{query_start};
                 my $query_end = $rh_align->{query_end};
-                print STDERR "$ref_start\t$query_start\t$ref_end\t$query_end\n";
+                DEBUG("$ref_start\t$query_start\t$ref_end\t$query_end");
             }
             $simlength = $align2sv_obj->{repeat_bases};
             $reptype = $align2sv_obj->{type};
@@ -303,10 +329,10 @@ sub process_variant {
             my $ref2p = ($align2sv_obj->{ref2p}) ? $align2sv_obj->{ref2p} + $left_end - 1 : undef;
             $refwidened = ($svsize > 0) ? "$chrom:$ref2-$ref1" : "$chrom:$ref2p-$ref1p";
             my $no_center_aligns = @cross_center_aligns;
-            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $svsize REFWIDENED $refwidened NOCENTERALIGNS $no_center_aligns\n";
+            DEBUG("BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $svsize REFWIDENED $refwidened NOCENTERALIGNS $no_center_aligns");
         }
         elsif (@end_aligns > 2) {
-            print STDERR "Complex alignments!\n";
+            DEBUG("Complex alignments!");
             return {};
         }
         elsif (@end_aligns == 1) { # too small to break alignment
@@ -335,11 +361,11 @@ sub process_variant {
             $simlength = ($new_rfs - $new_lfe) - ($rfs - $pmo);
             $reptype = ($orig_svsize < 0) ? (($simlength >= -1*$orig_svsize) ? 'CONTRAC' : 'SIMPLEDEL') :
                                             (($simlength >= -1*$orig_svsize) ? 'DUP' : 'SIMPLEINS');
-            print STDERR "BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $orig_svsize REFWIDENED: $refwidened (SMALL)\n";
+            DEBUG("BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $orig_svsize REFWIDENED: $refwidened (SMALL)");
         }
     }
     else {
-        print STDERR "Unexpected alignments from MUMmer!\n";
+        WARN("Unexpected alignments from MUMmer!");
         return {};
     }
     my $info_field = $vcf_fields[7];
@@ -399,13 +425,12 @@ sub run_mummer {
     my $mummer_cmd_file = "$workingdir/run_mummer.$nucmer_name.sh";
     my $mummer_fh = Open("$mummer_cmd_file", "w");
     print $mummer_fh "#!/bin/bash\nnucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
-    #print $mummer_fh "delta-filter -q $workingdir/nucmer.$nucmer_name.delta > $workingdir/nucmer.$nucmer_name.qdelta\n";
     close $mummer_fh;
     chmod 0755, $mummer_cmd_file;
     
     my $cmd = "$mummer_cmd_file > $workingdir/nucmer.$nucmer_name.out 2> $workingdir/nucmer.$nucmer_name.err";
     system($cmd) == 0
-        or print STDERR "Something went wrong running $mummer_cmd_file!\n";
+        or FATAL("Something went wrong running $mummer_cmd_file!");
 
     if ($Opt{'cleanup'}) {
         unlink $fasta1;
@@ -416,7 +441,6 @@ sub run_mummer {
         unlink "$workingdir/run_mummer.$nucmer_name.sh";
     }
 
-    #return "$workingdir/nucmer.$nucmer_name.qdelta";
     return "$workingdir/nucmer.$nucmer_name.delta";
 }
 
