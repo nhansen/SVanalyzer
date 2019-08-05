@@ -42,6 +42,7 @@ else {
 }
 
 my $commandline = join " ", @ARGV;
+$commandline = $0." $commandline";
 
 process_commandline();
 

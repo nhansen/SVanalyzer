@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
+use Log::Log4perl qw(:easy);
 use GTB::File qw(Open);
 use NHGRI::SVanalyzer::Comp;
 
@@ -40,9 +41,10 @@ else {
     chomp $edlib;
 }
 
-process_commandline();
+my $commandline = join " ", @ARGV;
+$commandline = $0." $commandline";
 
-my $workingdir = $Opt{workdir}; # good to allow use of a temporary file
+process_commandline();
 
 my $ref_fasta = $Opt{ref};
 my $vcf_file = $Opt{variants};
@@ -58,22 +60,32 @@ my $max_relshift = $Opt{relshift};
 my $max_relsizediff = $Opt{relsizediff};
 my $max_reldist = $Opt{reldist};
 
+# set up logging:
+$Opt{'loglevel'} = ($Opt{debug}) ? $DEBUG : 
+                   (($Opt{verbose}) ? $INFO : $WARN);
+
+Log::Log4perl->easy_init( { level => $Opt{'loglevel'},
+                            file => "$prefix.log" } );
+
+WARN($commandline);
+
 my ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges); # distances between connected nodes
 if ($dist_input) { # distances were calculated previously
+    WARN("Reading distances from file $dist_input");
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = read_distances($dist_input);
 }
 else {
+    WARN("Calculating distances between neighboring variants in $vcf_file");
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = calc_distances($vcf_file, $fof_file);
 }
 
 if (!$Opt{skip_clusters}) {
+    WARN("Writing vcf file $vcf_output of clustered variants");
     my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
     write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
 }
 
-unless ($Opt{nocleanup}) { # delete the working directory
-    rmdir $workingdir; 
-}
+WARN("Done");
 
 #------------
 # End MAIN
@@ -81,15 +93,11 @@ unless ($Opt{nocleanup}) { # delete the working directory
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( workdir => '.', max_dist => 100000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s variants=s fof=s workdir=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters nocleanup prefix=s manual help+ version)) || pod2usage(0);
+    %Opt = ( max_dist => 100000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge, ", q$Revision:$, "\n"; }
-
-    if ($Opt{workdir} ne '.') {
-        mkdir $Opt{workdir}; # don't stress if it was already there, so not checking return value
-    }
 
     if (!$Opt{ref} || (!$Opt{variants} && !$Opt{fof})) {
         pod2usage();
@@ -161,7 +169,7 @@ sub read_distances {
         #next if (!$id1);
     
         if (!(defined($posdiff)) || ($posdiff !~ /(\d+)/)) {
-            print STDERR "Skipping line--not enough fields:\n$line\n";
+            warn "Skipping line--not enough fields: $line";
             next;
         }
 
@@ -236,8 +244,7 @@ sub calc_distances {
                 my $rh_neighborhood_sv = $current_neighborhood_svs[$i];
                 my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
                                                             -sv1_info => $rh_neighborhood_sv,
-                                                            -sv2_info => $rh_sv,
-                                                            -workdir => $workingdir);
+                                                            -sv2_info => $rh_sv);
                 if (($rh_neighborhood_sv->{chrom} eq $rh_sv->{chrom}) && (abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos}) <= $max_distance) &&
                      $comp_obj->potential_match( -relsizediff => $max_relsizediff, -relshift => $max_relshift)) {
                     my $rh_distance_metrics = $comp_obj->calc_distance();
@@ -458,7 +465,7 @@ sub analyze_cluster {
             if (!$this_dist1 && !$this_dist2 && !$this_dist3) { # exact match--merge exact clusters
                 if ($node_cluster{$idlesser} != $node_cluster{$idgreater}) { # different clusters merge greater into lesser
                     if (!($exact_clusters[$node_cluster{$idgreater}])) {
-                        print STDERR "Empty node cluster for $idgreater being merged into $idlesser!\n";
+                        WARN("Empty node cluster for $idgreater being merged into $idlesser!");
                     }
                     my $old_cluster_index = $node_cluster{$idgreater};
                     my $new_cluster_index = $node_cluster{$idlesser};
@@ -471,7 +478,7 @@ sub analyze_cluster {
                     }
                 }
                 else {
-                    #print "$idgreater and $idlesser are already in the same exact cluster!\n";
+                    DEBUG("$idgreater and $idlesser are already in the same exact cluster!");
                 } 
             }
 
@@ -483,7 +490,6 @@ sub analyze_cluster {
     my $max_exact_clustersize = 0;
 
     foreach my $unique_cluster (@unique_clusters) {
-        #print "UNIQUE $unique_cluster\n";
         my @unique_vars = split /:/, $unique_cluster;
         my $no_vars = @unique_vars;
         if ($no_vars == $max_exact_clustersize) { # it's a tie
