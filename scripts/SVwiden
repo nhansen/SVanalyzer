@@ -424,7 +424,7 @@ sub run_mummer {
 
     my $mummer_cmd_file = "$workingdir/run_mummer.$nucmer_name.sh";
     my $mummer_fh = Open("$mummer_cmd_file", "w");
-    print $mummer_fh "#!/bin/bash\nnucmer -o -p $workingdir/nucmer.$nucmer_name -maxmatch $fasta1 $fasta2\n";
+    print $mummer_fh "#!/bin/bash\nnucmer -p $workingdir/nucmer.$nucmer_name --maxmatch $fasta1 $fasta2\n";
     close $mummer_fh;
     chmod 0755, $mummer_cmd_file;
     

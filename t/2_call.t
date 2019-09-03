@@ -42,7 +42,7 @@ SKIP: {
     $script = 'blib/script/SVwiden';
     
     mkdir "t/test";
-    system("perl -w -I blib/lib $script --variants t/widen.vcf --prefix t/widened --ref t/hs37d5_1start.fa > t/test2.out 2>&1");
+    system("perl -w -I blib/lib $script --variants t/widen.vcf --prefix t/widened --ref t/hs37d5_1start.fa --workdir t/ > t/test2.out 2>&1");
     $out = `awk -F"\t" '\$2==821604 {print \$8}' t/widened.vcf`;
     like $out, qr/REPTYPE=DUP/, "$script vartype";
     $out = `awk -F"\t" '\$2==842057 {print \$8}' t/widened.vcf`;
