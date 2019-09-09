@@ -47,6 +47,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1",
+   "version" : "0.3",
    "x_serialization_backend" : "JSON::PP version 2.27300"
 }

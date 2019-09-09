@@ -29,5 +29,5 @@ provides:
     file: lib/NISC/Sequencing/Date.pm
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.1'
+version: '0.3'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.016'
