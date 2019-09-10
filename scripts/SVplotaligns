@@ -1,0 +1,415 @@
+#!/usr/bin/env perl
+
+# $Id:$
+
+use strict;
+use warnings;
+use Getopt::Long;
+use Pod::Usage;
+use GTB::File qw(Open);
+use NISC::Sequencing::Date;
+use NHGRI::MUMmer::AlignSet;
+
+our %Opt;
+
+=head1 NAME
+
+SVplotaligns - From a "coords" or "delta" file, plot aligns for a desired region of the reference and/or query.
+
+=head1 SYNOPSIS
+
+  SVplotaligns --coords <path to a MUMmer "coords" file of alignments> --refcoords <reference coordinates in chr:start-end format> --querycoords <query coordinates in chr:start-end format> --format <png, pdf> --prefix <output file prefix>
+
+  SVplotaligns --delta <path to MUMmer "delta" file of alignments> --refcoords <reference coordinates in chr:start-end format> --querycoords <query coordinates in chr:start-end format> --format <png, pdf> --prefix <output file prefix>
+
+For complete documentation, run C<SVplotaligns -man>
+
+=cut
+
+#------------
+# Begin MAIN 
+#------------
+
+process_commandline();
+
+my $coordsfile = $Opt{'coords'};
+my $deltafile = $Opt{'delta'};
+my $refregion = $Opt{'refcoords'};
+my $queryregion = $Opt{'querycoords'};
+my $format = $Opt{'format'};
+my $prefix = $Opt{'prefix'};
+
+my $Usage = qq!
+Usage:
+  SVplotaligns --coords <path to a MUMmer "coords" file of alignments> --refcoords <reference coordinates in chr:start-end format> --querycoords <query coordinates in chr:start-end format> --format <png, pdf> --prefix <output file prefix>
+
+  SVplotaligns --delta <path to MUMmer "delta" file of alignments> --refcoords <reference coordinates in chr:start-end format> --querycoords <query coordinates in chr:start-end format> --format <png, pdf> --prefix <output file prefix>\n!;
+
+if (!$coordsfile && !$deltafile && !$refregion && !$queryregion) {
+    die $Usage;
+}
+
+my $ra_overlapping_aligns = [];
+
+if ($coordsfile) {
+    $ra_overlapping_aligns = find_overlapping_alignments($coordsfile, $refregion, $queryregion);
+}
+elsif ($deltafile) {
+    # implement later
+    die "--delta option is not yet implemented.\n";
+}
+else {
+    die "You must specify a coords file with the --coords option or a delta file with the --delta option to run SVplotaligns.\n";
+}
+
+my ($refaxismin, $refaxismax, $queryaxismin, $queryaxismax);
+if ($Opt{'limitcoords'}) {
+    ($refaxismin, $refaxismax, $queryaxismin, $queryaxismax) = estimate_axis_limits($ra_overlapping_aligns, $refregion, $queryregion);
+}
+
+write_aligns_file($ra_overlapping_aligns, $prefix);
+
+if (@{$ra_overlapping_aligns}) {
+    write_rscript_file($ra_overlapping_aligns, $prefix, $format, $refaxismin, $refaxismax, $queryaxismin, $queryaxismax);
+    generate_plots($prefix, $format);
+}
+
+#------------
+# End MAIN
+#------------
+
+sub process_commandline {
+    # Set defaults here
+    %Opt = ( format => 'png' );
+    GetOptions(\%Opt, qw( coords=s delta=s querycoords=s refcoords=s prefix=s format=s nolaunch limitcoords
+                          manual help+ version)) || pod2usage(0);
+    if ($Opt{manual})  { pod2usage(verbose => 2); }
+    if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
+    if ($Opt{version}) { die "SVplotaligns, ", q$Revision:$, "\n"; }
+
+    if (!$Opt{prefix}) { 
+        $Opt{prefix} = 'plotaligns';
+    }
+}
+
+sub find_overlapping_alignments {
+    my $coordsfile = shift;
+    my $refregion = shift;
+    my $queryregion = shift;
+
+    my @aligns = ();
+    my ($ref, $refstart, $refend, $query, $querystart, $queryend);
+    if ($refregion && $refregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($ref, $refstart, $refend) = ($1, $2, $3);
+    }
+    elsif ($refregion) {
+        die "Improperly formatted ref coordinate $refregion!\n";
+    }
+    if ($queryregion && $queryregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($query, $querystart, $queryend) = ($1, $2, $3);
+    }
+    elsif ($queryregion) {
+        die "Improperly formatted query coordinate $queryregion!\n";
+    }
+
+    my $coord_fh = Open($coordsfile);
+
+    while (<$coord_fh>) {
+        chomp;
+        my ($rstart, $rend, $qstart, $qend, $rlength, $qlength, $perciden, $reflength, $querylength, $mmrate, $percmatch, $alignref, $alignquery) = split /\t/, $_;
+        if ((($ref) && ($alignref eq $ref && overlaps($rstart, $rend, $refstart, $refend))) || 
+            (($query) && ($alignquery eq $query && overlaps($qstart, $qend, $querystart, $queryend)))) {
+
+            push @aligns, { 'query' => $alignquery,
+                            'querystart' => $qstart,
+                            'queryend' => $qend,
+                            'ref' => $alignref,
+                            'refstart' => $rstart,
+                            'refend' => $rend };
+        }
+    }
+
+    close $coord_fh;
+
+    return [@aligns];
+}
+
+sub overlaps {
+    my $start1 = shift;
+    my $end1 = shift;
+    my $start2 = shift;
+    my $end2 = shift;
+
+    if (($start1 < $end1) && ($start2 < $end2)) { # not complemented
+        return !(($start1 > $end2) || ($end1 < $start2));
+    }
+    elsif ($start1 > $end1) { # e1,s1 <=> s2,e2
+        return !(($end1 > $end2) || ($start2 > $start1));
+    }
+    elsif ($start2 > $end2) { # s1,e1 <=> e2,s2
+        return !(($end2 > $end1) || ($start1 > $start2));
+    }
+}
+
+sub write_aligns_file {
+    my $ra_aligns = shift;
+    my $prefix = shift;
+
+    my $aligns_fh = Open("$prefix.aligns", "w");
+    if (!@{$ra_aligns}) {
+        print $aligns_fh "No alignments found.\n";
+    }
+
+    foreach my $rh_aligns (@{$ra_aligns}) {
+        print $aligns_fh "$rh_aligns->{ref}\t$rh_aligns->{refstart}\t$rh_aligns->{refend}\t$rh_aligns->{query}\t$rh_aligns->{querystart}\t$rh_aligns->{queryend}\n";
+    }
+
+    close $aligns_fh;
+
+}
+
+sub estimate_axis_limits {
+    my $ra_overlapping_aligns = shift;
+    my $refregion = shift;
+    my $queryregion = shift;
+
+    my ($refaxismin, $refaxismax, $queryaxismin, $queryaxismax);
+
+    if ($refregion && $refregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($refaxismin, $refaxismax) = ($2, $3);
+    }
+    elsif ($refregion) {
+        die "Improperly formatted ref coordinate $refregion!\n";
+    }
+    if ($queryregion && $queryregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($queryaxismin, $queryaxismax) = ($2, $3);
+    }
+    elsif ($queryregion) {
+        die "Improperly formatted query coordinate $queryregion!\n";
+    }
+
+    # Is one missing?
+
+    if (!defined($queryaxismin) || !defined($queryaxismax)) { # must extrapolate
+        my @refmin_ol_aligns = grep {($_->{refstart} <= $refaxismin && $_->{refend} >= $refaxismin) ||
+                                     ($_->{refend} <= $refaxismin && $_->{refstart} >= $refaxismin)} 
+                                 @{$ra_overlapping_aligns};
+
+        foreach my $rh_ref_ol_align (@refmin_ol_aligns) {
+            my $queryminpos = find_align_pos($rh_ref_ol_align, $refaxismin, 'ref');
+            if (!defined($queryaxismin) || $queryaxismin > $queryminpos) {
+                $queryaxismin = $queryminpos;
+            }
+            if (!defined($queryaxismax) || $queryaxismax < $queryminpos) {
+                $queryaxismax = $queryminpos;
+            }
+        }
+        my @refmax_ol_aligns = grep {($_->{refstart} <= $refaxismax && $_->{refend} >= $refaxismax) ||
+                                     ($_->{refend} <= $refaxismax && $_->{refstart} >= $refaxismax)} 
+                                 @{$ra_overlapping_aligns};
+
+        foreach my $rh_ref_ol_align (@refmax_ol_aligns) {
+            my $querymaxpos = find_align_pos($rh_ref_ol_align, $refaxismax, 'ref');
+            if (!defined($queryaxismin) || $queryaxismin > $querymaxpos) {
+                $queryaxismin = $querymaxpos;
+            }
+            if (!defined($queryaxismax) || $queryaxismax < $querymaxpos) {
+                $queryaxismax = $querymaxpos;
+            }
+        }
+    }
+
+    if (!defined($refaxismin) || !defined($refaxismax)) { # must extrapolate
+        my @querymin_ol_aligns = grep {($_->{querystart} <= $queryaxismin && $_->{queryend} >= $queryaxismin) ||
+                                       ($_->{queryend} <= $queryaxismin && $_->{querystart} >= $queryaxismin)} 
+                                 @{$ra_overlapping_aligns};
+
+        foreach my $rh_query_ol_align (@querymin_ol_aligns) {
+            my $refminpos = find_align_pos($rh_query_ol_align, $queryaxismin, 'query');
+            if (!defined($refaxismin) || $refaxismin > $refminpos) {
+                $refaxismin = $refminpos;
+            }
+            if (!defined($refaxismax) || $refaxismax < $refminpos) {
+                $refaxismax = $refminpos;
+            }
+        }
+        my @querymax_ol_aligns = grep {($_->{querystart} <= $queryaxismax && $_->{queryend} >= $queryaxismax) ||
+                                     ($_->{queryend} <= $queryaxismax && $_->{querystart} >= $queryaxismax)} 
+                                 @{$ra_overlapping_aligns};
+
+        foreach my $rh_query_ol_align (@querymax_ol_aligns) {
+            my $refmaxpos = find_align_pos($rh_query_ol_align, $queryaxismax, 'query');
+            if (!defined($refaxismin) || $refaxismin > $refmaxpos) {
+                $refaxismin = $refmaxpos;
+            }
+            if (!defined($refaxismax) || $refaxismax < $refmaxpos) {
+                $refaxismax = $refmaxpos;
+            }
+        }
+    }
+    return ($refaxismin, $refaxismax, $queryaxismin, $queryaxismax);
+}
+
+sub find_align_pos { # simple linear interpolation to find other coordinate of given point
+    my $rh_align = shift;
+    my $position = shift;
+    my $queryref = shift;
+
+    if ($queryref eq 'ref') { # have ref position, find query:
+        my $querypos = ($position - $rh_align->{refstart})/($rh_align->{refend} - $rh_align->{refstart}) *
+                                  ($rh_align->{queryend} - $rh_align->{querystart}) + $rh_align->{querystart};
+        return int($querypos);
+    }
+    elsif ($queryref eq 'query') { # have query position, find ref:
+        my $refpos = ($position - $rh_align->{querystart})/($rh_align->{queryend} - $rh_align->{querystart}) *
+                                  ($rh_align->{refend} - $rh_align->{refstart}) + $rh_align->{refstart};
+        return int($refpos);
+    }
+    else {
+        die "Third argument to find_align_pos must be ref or query\n";
+    }
+}
+
+sub write_rscript_file {
+    my $ra_aligns = shift;
+    my $prefix = shift;
+    my $format = shift;
+    my $refaxismin = shift;
+    my $refaxismax = shift;
+    my $queryaxismin = shift;
+    my $queryaxismax = shift;
+
+    my %refvals = map { $_->{'ref'} => 1 } @{$ra_aligns};
+    my %queryvals = map { $_->{'query'} => 1 } @{$ra_aligns};
+    my @refs = keys %refvals;
+    my @querys = keys %queryvals;
+
+    if (@refs != 1 ) {
+        print STDERR "Multiple references among aligns--using only $refs[0]\n";
+    }
+    if (@querys != 1) {
+        print STDERR "Multiple query values among aligns--using only $querys[0]\n";
+    }
+
+    my $ref = $refs[0];
+    my $query = $querys[0];
+
+    my @refstarts = map {$_->{refstart}} @{$ra_aligns};
+    my @querystarts = map {$_->{querystart}} @{$ra_aligns};
+    my @refends = map {$_->{refend}} @{$ra_aligns};
+    my @queryends = map {$_->{queryend}} @{$ra_aligns};
+
+    my $refstartstring = join ', ', @refstarts;
+    my $querystartstring = join ', ', @querystarts;
+    my $refendstring = join ', ', @refends;
+    my $queryendstring = join ', ', @queryends;
+
+    my @sorted_refs = sort {$a <=> $b} (@refstarts, @refends);
+    if (@sorted_refs > 4) {
+        shift @sorted_refs;
+        pop @sorted_refs;
+    }
+
+    my @sorted_querys = sort {$a <=> $b} (@querystarts, @queryends);
+    if (@sorted_querys > 4) {
+        shift @sorted_querys;
+        pop @sorted_querys;
+    }
+
+    my $refbuffer = (@refstarts > 2) ? (($sorted_refs[$#sorted_refs] - $sorted_refs[0])/2) : (($sorted_refs[$#sorted_refs] - $sorted_refs[0])/10) ;
+    my $querybuffer = (@refstarts > 2) ? (($sorted_querys[$#sorted_querys] - $sorted_querys[0])/2) : (($sorted_querys[$#sorted_querys] - $sorted_querys[0])/10);
+
+    my $refmin = ($Opt{limitcoords}) ? $refaxismin : $sorted_refs[0] - int($refbuffer);
+    my $refmax = ($Opt{limitcoords}) ? $refaxismax : $sorted_refs[$#sorted_refs] + int($refbuffer);
+    my $querymin = ($Opt{limitcoords}) ? $queryaxismin : $sorted_querys[0] - int($querybuffer);
+    my $querymax = ($Opt{limitcoords}) ? $queryaxismax : $sorted_querys[$#sorted_querys] + int($querybuffer);
+
+    my $devopen = "$format\(\"$prefix.$format\"\)\n";
+    my $refqueryassign = "\nref <- \"$ref\"\nquery <- \"$query\"\n\n";
+    my $alignassign = "aligns <- data.frame( refstart=c( $refstartstring ),\nrefend=c( $refendstring ),\nquerystart=c( $querystartstring ),\nqueryend=c( $queryendstring ) )\n\n";
+
+    my $plotstatement = "plot( c(), c(), xlab=\"$ref\", ylab=\"$query\", xlim=c( $refmin, $refmax ), ylim=c( $querymin, $querymax ) )\n\n";
+    my $segmentline = "segments( aligns\$refstart, aligns\$querystart, aligns\$refend, aligns\$queryend)\n\n";
+    my $devoff = "dev.off()\n";
+
+    my $rscript_fh = Open("$prefix.R", "w");
+    print $rscript_fh "$devopen$refqueryassign$alignassign$plotstatement$segmentline$devoff";
+    close $rscript_fh;
+}
+
+sub generate_plots {
+    my $prefix = shift;
+    my $format = shift;
+
+    system("Rscript $prefix.R")==0
+        or die "Unable to generate image file with Rscript.\n";
+
+    unless ($Opt{'nolaunch'}) {
+        exec("eog $prefix.$format");
+    }
+    
+}
+
+__END__
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--delta <path to delta file>>
+
+Specify a delta file produced by MUMmer with the alignments to be used for
+retrieving SV sequence information.  Generally, one would use the same
+filtered delta file that was used to create the "diff" file (see below).
+(Either a BAM file or a MUMmer-generated delta file is required).
+
+=item B<--regions <path to a BED file of regions>>
+
+Specify a BED file of regions to be investigated for structural variants
+in the assembly (i.e., the query fasta file). If not provided, potential
+regions with structural variation are discovered from the endpoints of 
+alignments in the supplied MUMmer alignment file. (Optional).
+
+=item B<--prefix <prefix of output filenames>>
+
+Specify the prefix to use for output file names (e.g., <prefix>.R for the
+R script to generate the plots, <prefix>.<format> for the image files, and
+<prefix>.aligns for the list of overlapping alignment coordinates.
+
+=item B<--refcoords <string to include as the reference name in the VCF header>>
+
+Specify a string to be written as the reference name in the ##reference line 
+of the VCF header. (Optional).
+
+=item B<--help|--manual>
+
+Display documentation.  One C<--help> gives a brief synopsis, C<-h -h> shows
+all options, C<--manual> provides complete documentation.
+
+=back
+
+=head1 AUTHOR
+
+ Nancy F. Hansen - nhansen@mail.nih.gov
+
+=head1 LEGAL
+
+This software/database is "United States Government Work" under the terms of
+the United States Copyright Act.  It was written as part of the authors'
+official duties for the United States Government and thus cannot be
+copyrighted.  This software/database is freely available to the public for
+use without a copyright notice.  Restrictions cannot be placed on its present
+or future use. 
+
+Although all reasonable efforts have been taken to ensure the accuracy and
+reliability of the software and data, the National Human Genome Research
+Institute (NHGRI) and the U.S. Government does not and cannot warrant the
+performance or results that may be obtained by using this software or data.
+NHGRI and the U.S.  Government disclaims all warranties as to performance,
+merchantability or fitness for any particular purpose. 
+
+In any work or product derived from this material, proper attribution of the
+authors as the source of the software or data should be made, using "NHGRI
+Genome Technology Branch" as the citation. 
+
+=cut
