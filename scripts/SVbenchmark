@@ -201,7 +201,6 @@ sub calculate_distance_matrix {
             if (($rh_truesv->{chrom} eq $rh_testsv->{chrom}) && 
                   (abs($rh_testsv->{pos} - $rh_truesv->{pos}) <= $max_distance) &&
                   ($comp_obj->potential_match())) {
-                #msg("Comparing $rh_truesv->{chrom} variants distance $pos_diff apart (less than $max_distance)", $Opt{verbose});
                 my $rh_distance_metrics = $comp_obj->calc_distance();
                 my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                 my $max_shift = $rh_distance_metrics->{'max_shift'};
@@ -294,6 +293,7 @@ sub retrieve_next_sorted_sv {
             $end = $start + $reflength - 1;
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
+            WARN("Skipping type BND or UNK: $next_line");
             return {};
         }
         elsif (($alt eq '<DEL>') && ($info =~ /;END=(\d+);{0,1}/ || $info =~ /^END=(\d+);{0,1}/)) { # use end tag
@@ -302,7 +302,7 @@ sub retrieve_next_sorted_sv {
             $ref = uc($ref_db->seq("$chrom:$smo-$end"));
             $alt = substr($ref, 0, 1); # first character of reference
         }
-        else { # check for END= INFO tag
+        else { # don't know how to handle this
             WARN("Skipping non-ATGC ref or alt record: $next_line");
             return {};
         }
