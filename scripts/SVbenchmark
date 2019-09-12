@@ -157,7 +157,8 @@ sub calculate_distance_matrix {
         } 
         my $test_chrom = $rh_testsv->{chrom}; 
         my $test_pos = $rh_testsv->{pos}; 
-        next if (!($test_chrom));
+        my $test_end = $rh_testsv->{end}; 
+        next if ((!($test_chrom)) || (!($test_pos)) || (!($test_end)));
         $total_test_svs++;
    
         # be sure @current_neighborhood_true_svs contains only nearby true SVs by deleting if necessary: 
@@ -183,7 +184,8 @@ sub calculate_distance_matrix {
             } 
             my $truth_chrom = $rh_nexttruesv->{chrom}; 
             my $truth_pos = $rh_nexttruesv->{pos}; 
-            next if (!($truth_chrom));
+            my $truth_end = $rh_nexttruesv->{end}; 
+            next if ((!($truth_chrom)) || (!($truth_pos)) || (!($truth_end)));
             $total_true_svs++;
 
             push @current_neighborhood_true_svs, $rh_nexttruesv;
