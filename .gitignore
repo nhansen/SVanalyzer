@@ -12,8 +12,12 @@ docs/_template/*
 t/test*.out
 t/widened.vcf
 t/merged.vcf
+t/refined.vcf
 t/nucmer.*
+t/test/nucmer.*
 t/*.distances
 *.tar.gz
 t/refine.out
 t/refine.vcf
+scripts/ignore
+scripts/ignore/*
