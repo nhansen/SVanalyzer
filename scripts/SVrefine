@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 eval 'exec /usr/bin/perl -w -S $0 ${1+"$@"}'
     if 0; # not running under some shell
@@ -8,6 +8,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
+use Log::Log4perl qw(:easy);
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
@@ -36,6 +37,14 @@ For complete documentation, run C<SVrefine -man>
 #------------
 
 process_commandline();
+
+# set up logging:
+my $prefix = $Opt{'prefix'};
+$Opt{'loglevel'} = ($Opt{debug}) ? $DEBUG : 
+                   (($Opt{verbose}) ? $INFO : $WARN);
+
+Log::Log4perl->easy_init( { level => $Opt{'loglevel'},
+                            file => "$prefix.log" } );
 
 my $regions_file = $Opt{regions};
 my $samplename = $Opt{samplename};
@@ -72,16 +81,16 @@ close $nocovregions_fh;
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0 );
+    %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0, prefix => 'SVrefine' );
     GetOptions(\%Opt, qw( bam=s delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s
-                          nocov=s buffer=i svregions=s bufseg=i maxsize=i verbose
+                          nocov=s buffer=i svregions=s bufseg=i maxsize=i prefix=s verbose
                           includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVrefine, ", q$Revision: 7771 $, "\n"; }
 
     if (!($Opt{delta}) && !($Opt{bam})) {
-        print STDERR "Must specify a bam file of alignments with the --bam option or a delta file path with --delta option!\n"; 
+        WARN("Must specify a bam file of alignments with the --bam option or a delta file path with --delta option!\n"); 
         pod2usage(0);
     }
 
@@ -90,8 +99,7 @@ sub process_commandline {
     }
 
     if (!($Opt{outvcf})) {
-        print STDERR "Must specify a VCF file path to output confirmed variants!\n"; 
-        pod2usage(0);
+       $Opt{outvcf} = $Opt{prefix}.".vcf.gz";
     }
 
     if (!$Opt{outref}) { 
@@ -186,13 +194,13 @@ sub discover_regions {
     my $alignset_obj = shift;
     my $ref_db = shift;
 
-    print "Discovering regions!\n";
+    INFO("Discovering regions!\n");
     my $rh_ref_entrypairs = $alignset_obj->{refentrypairs};
     my %regions_hash = (); # by chromosome, then list of regions
     
     my $no_regions = 0; 
     foreach my $chrom (keys %{$rh_ref_entrypairs}) {
-        print "$chrom regions\n";
+        INFO("$chrom regions\n");
         my $ra_rentry_pairs = $rh_ref_entrypairs->{$chrom}; # everything aligning to this chromosome
         my @ref_starts = ();
         my @ref_ends = ();
@@ -220,7 +228,7 @@ sub discover_regions {
             }
         }
     }
-    print "Discovered $no_regions regions\n" if ($Opt{verbose});
+    INFO("Discovered $no_regions regions\n");
     return {%regions_hash};
 
 } ## end discover_regions
@@ -271,7 +279,7 @@ sub process_region {
         my $regionstring = "$chrom:$start-$end";
 
         if (!check_region($ref_db, $chrom, $start, $end)) {
-            print "REGION $regionstring CHROMEND\n" if ($Opt{verbose});
+            INFO("REGION $regionstring CHROMEND\n");
             next;
         }
 
@@ -292,7 +300,7 @@ sub process_region {
         
         my @aligned_contigs = map { $_->{query_entry} } @valid_entry_pairs;
         my $no_entry_pairs = @valid_entry_pairs;
-        print "REGION $regionstring ENTRYPAIRS $no_entry_pairs\n" if ($Opt{verbose});
+        INFO("REGION $regionstring ENTRYPAIRS $no_entry_pairs\n");
 
         my @refaligns = ();
         foreach my $rh_rentry_pair (@valid_entry_pairs) { # for each contig aligned across region
@@ -324,7 +332,7 @@ sub process_region {
             }
 
             if (!$nonref_found) {
-                print "REGION $contig $regionstring NOVARFOUND\n" if ($Opt{verbose});
+                INFO("REGION $contig $regionstring NOVARFOUND\n");
                 next;
             }
 
@@ -337,7 +345,7 @@ sub process_region {
                     my $query_start = $rh_align->{query_start};
                     my $query_end = $rh_align->{query_end};
     
-                    print "ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n";
+                    INFO("ALIGN\t$chrom\t$start\t$end\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\n");
                 }
             }
 
@@ -347,7 +355,7 @@ sub process_region {
             my $reference_aligns = @ref_aligns;
             my $nr_aligns = $all_aligns - $reference_aligns;
             if ($nr_aligns) {
-                print "REGION $regionstring NONREFALIGNS $nr_aligns\n" if ($Opt{verbose});
+                INFO("REGION $regionstring NONREFALIGNS $nr_aligns\n");
             } 
             if (@ref_aligns <= 3) { # simple insertion, deletion, or inversion
                 my @simple_breaks = ();
@@ -355,17 +363,17 @@ sub process_region {
                 if (@ref_aligns == 2 && $ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) {
                     # order them, if possible, checking for consistency:
                     @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1]);
-                    print "REGION $regionstring ONESIMPLE\n" if (@simple_breaks==1) && ($Opt{verbose});
+                    INFO("REGION $regionstring ONESIMPLE\n") if (@simple_breaks==1);
                 }
                 elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} == $ref_aligns[1]->{comp}) && 
                     ($ref_aligns[1]->{comp} == $ref_aligns[2]->{comp})) {
                     @simple_breaks = find_breaks($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
-                    print "REGION $regionstring TWOSIMPLE\n" if (@simple_breaks==2) && ($Opt{verbose});
+                    INFO("REGION $regionstring TWOSIMPLE\n") if (@simple_breaks==2);
                 }
                 elsif ((@ref_aligns==3) && ($ref_aligns[0]->{comp} != $ref_aligns[1]->{comp}) &&
                        ($ref_aligns[1]->{comp} != $ref_aligns[2]->{comp})) {
                     @inversion_aligns = ($ref_aligns[0], $ref_aligns[1], $ref_aligns[2]);
-                    print "REGION $regionstring INVERSION\n" if ($Opt{verbose});
+                    INFO("REGION $regionstring INVERSION\n");
                 }
 
                 foreach my $ra_simple_break (@simple_breaks) {
@@ -390,15 +398,15 @@ sub process_region {
                     }
                     $svsize = abs($svsize);
                     my $repeat_bases = $align2sv_obj->{repeat_bases};
-                    print "FOUNDSV\t$chrom\t$ref1\t$ref2\t$query1\t$query2\t$svsize\t$type\t$repeat_bases\n";
+                    WARN("FOUNDSV\t$chrom\t$ref1\t$ref2\t$query1\t$query2\t$svsize\t$type\t$repeat_bases\n");
   
                     if ($repeat_bases > 10*$svsize) { # likely alignment artifact?
-                        print "REGION $regionstring ARTIFACT";
+                        WARN("REGION $regionstring ARTIFACT");
                         next;
                     }
 
                     if (($Opt{maxsize}) && ($svsize > $Opt{maxsize})) {
-                        print "REGION $regionstring MAXSIZE\n";
+                        WARN("REGION $regionstring MAXSIZE\n");
                         next;
                     }
 
@@ -428,7 +436,7 @@ sub process_region {
                 }
             }
             elsif (@ref_aligns>3) {
-                print STDERR "REGION $regionstring MULTIALIGNS\n" if ($Opt{verbose});
+                INFO("REGION $regionstring MULTIALIGNS\n");
             }
         }
     }
@@ -442,7 +450,7 @@ sub check_region {
 
     my $chrlength = $ref_db->len($chrom);
     if ((0 >= $start - $Opt{buffer}) || ($chrlength < $end + $Opt{buffer})) {
-        print STDERR "REGION $chrom:$start-$end is too close to an end of the chromosome $chrom!\n";
+        WARN("REGION $chrom:$start-$end is too close to an end of the chromosome $chrom!\n");
         return 0;
     }
     else {
@@ -467,22 +475,22 @@ sub find_valid_entry_pairs {
         else {
             my $no_left_aligns = @left_span_aligns;
             my $no_right_aligns = @right_span_aligns;
-            print "Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n" if ($Opt{verbose});
+            INFO("Contig $rh_entrypair->{query_entry} has $no_left_aligns left aligns and $no_right_aligns right aligns!\n");
         }
 
         # want to find the same comp value on left and right side:
         if (grep {$_->{comp} == 0} @left_span_aligns && grep {$_->{comp} == 0} @right_span_aligns) {
             $rh_entrypair->{comp} = 0;
             push @valid_entry_pairs, $rh_entrypair;
-            print "At least one forward alignment on left and right\n" if ($Opt{verbose});
+            INFO("At least one forward alignment on left and right\n");
         }
         elsif (grep {$_->{comp} == 1} @left_span_aligns && grep {$_->{comp} == 1} @right_span_aligns) {
             $rh_entrypair->{comp} = 1;
             push @valid_entry_pairs, $rh_entrypair;
-            print "At least one reverse alignment on left and right\n" if ($Opt{verbose});
+            INFO("At least one reverse alignment on left and right\n");
         }
         else {
-            print "Odd line up of alignments for contig $rh_entrypair->{query_entry}\n";
+            WARN("Odd line up of alignments for contig $rh_entrypair->{query_entry}\n");
             next;
         }
     }
@@ -540,11 +548,11 @@ sub find_breaks {
                 push @valid_breaks, [$left_align, $right_align];
             }
             else {
-                print "INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n";
+                WARN("INVALID ALIGNS $left_align->{query_start}-$left_align->{query_end}, then $right_align->{query_start}-$right_align->{query_end}\n");
             }
         }
         else {
-            print "REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n";
+            WARN("REF ENDS OUT OF ORDER $left_align->{ref_start}-$left_align->{ref_end}, then $right_align->{ref_start}-$right_align->{ref_end}\n");
         }
     }
 
@@ -571,7 +579,7 @@ sub process_inversion {
     my $secondcomp = $middle_align->{comp};
     my $thirdcomp = $right_align->{comp};
 
-    print STDERR "INVERSION refs $ref1 $ref2 $ref3 $ref4 queries $query1 $query2 $query3 $query4 comp $firstcomp/$secondcomp/$thirdcomp\n";
+    WARN("INVERSION refs $ref1 $ref2 $ref3 $ref4 queries $query1 $query2 $query3 $query4 comp $firstcomp/$secondcomp/$thirdcomp\n");
 
 }
 
@@ -614,7 +622,7 @@ sub write_simple_variant {
                 $refseq = uc($ref_db->seq($chrom, $pos, $pos));
             }
             else {
-                print "Ref position of $vartype at $pos is not within chromosome $chrom boundaries--skipping!\n";
+                WARN("Ref position of $vartype at $pos is not within chromosome $chrom boundaries--skipping!\n");
                 return;
             }
 
@@ -631,7 +639,7 @@ sub write_simple_variant {
                 }
             }
             else {
-                print "Varcontig positions of $vartype at $varcontig:$altpos-$altend are not within contig $varcontig boundaries--skipping!\n";
+                WARN("Varcontig positions of $vartype at $varcontig:$altpos-$altend are not within contig $varcontig boundaries--skipping!\n");
                 return;
             }
         }
@@ -656,7 +664,7 @@ sub write_simple_variant {
             }
         }
         if ($pos > $end) {
-            print STDERR "Deletion position $pos is greater than endpoint $end for $chrom:$pos, svlen $svsize, breaksimlength $repbases\n";
+            WARN("Deletion position $pos is greater than endpoint $end for $chrom:$pos, svlen $svsize, breaksimlength $repbases\n");
             next;
         }
         if ($Opt{includeseqs}) {
@@ -664,7 +672,7 @@ sub write_simple_variant {
                 $refseq = uc($ref_db->seq($chrom, $pos, $end));
             }
             else {
-                print "Ref position of $vartype at $pos-$end is not within chromosome $chrom boundaries--skipping!\n";
+                WARN("Ref position of $vartype at $pos-$end is not within chromosome $chrom boundaries--skipping!\n");
                 return;
             }
             if ($altpos >= 1 && $altpos <= $varcontiglength) {
@@ -674,7 +682,7 @@ sub write_simple_variant {
                 }
             }
             else {
-                print "Varcontig positions of $vartype at $varcontig:$altpos-$altpos are not within contig $varcontig boundaries--skipping!\n";
+                WARN("Varcontig positions of $vartype at $varcontig:$altpos-$altpos are not within contig $varcontig boundaries--skipping!\n");
                 return;
             }
         }
