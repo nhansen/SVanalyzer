@@ -10,14 +10,14 @@ National Institutes of Health.  Nancy can be reached at nhansen@mail.nih.gov.
 
 h2. Installing with conda
 
-SVanalyzer can be installed with the conda package manager from the bioconda channel
-(for details on setting up conda/bioconda, see https://bioconda.github.io/user/install.html):
+SVanalyzer can be installed using the conda package manager with the bioconda channel.
+For details on setting up conda/bioconda, see https://bioconda.github.io/user/install.html.
 
 bc.. conda create -n svanalyzer
 conda activate svanalyzer
 conda install svanalyzer
 
-h2. Build Dependencies
+h2. Building SVanalyzer Yourself: Dependencies
 
 * samtools v.0.1.17 or better (https://sourceforge.net/projects/samtools/files/)
 
@@ -39,7 +39,7 @@ The SVbenchmark command has an option --include_bed which uses bedtools
 evaluated to regions specified in a BED file. The command will not run with
 this option if you don't have bedtools installed.
 
-h2. Build Instructions
+h2. Building SVanalyzer Yourself: Instructions
 
 h3. Clone the repository
 
