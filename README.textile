@@ -8,6 +8,15 @@ p. SVanalyzer was written by Nancy Fisher Hansen, a staff scientist in the Cance
 Genetics and Comparative Genomics Branch (CGCG) of NHGRI, an institute at the 
 National Institutes of Health.  Nancy can be reached at nhansen@mail.nih.gov.
 
+h2. Installing with conda
+
+SVanalyzer can be installed with the conda package manager from the bioconda channel
+(for details on setting up conda/bioconda, see https://bioconda.github.io/user/install.html):
+
+bc.. conda create -n svanalyzer
+conda activate svanalyzer
+conda install svanalyzer
+
 h2. Build Dependencies
 
 * samtools v.0.1.17 or better (https://sourceforge.net/projects/samtools/files/)
