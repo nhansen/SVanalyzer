@@ -25,7 +25,7 @@ variant calls.
 Install
 ========
 
-Conda Installation
+Using conda
 -------------------
 
 SVanalyzer can be installed using the conda package manager with the bioconda channel.
@@ -37,7 +37,7 @@ For details on setting up conda/bioconda, see the `Bioconda user docs <https://b
   conda activate svanalyzer
   conda install svanalyzer
 
-Tarball/Github Clone Installation
+With a release tarball/github clone
 -------------------
 
 SVanalyzer can also be installed by downloading a `release tarball <https://github.com/nhansen/SVanalyzer/releases>`_
