@@ -38,5 +38,6 @@ Options
 **--variants**                    A VCF-formatted file of (possibly equivalent) variants to merge.
 **--fof**                         A file of paths to VCF-formatted files to merge.
 **--prefix**                      Prefix for output file names (default "merged")
+**--max_dist**                    Maximum distance between pairs of variants to perform comparison for potential merging (default: 2000)
 ==========================     =======================================================================================================
 

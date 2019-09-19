@@ -98,7 +98,7 @@ WARN("Done");
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( max_dist => 100000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
+    %Opt = ( max_dist => 2000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
     GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
