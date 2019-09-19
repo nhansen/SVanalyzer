@@ -75,7 +75,12 @@ if ($dist_input) { # distances were calculated previously
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = read_distances($dist_input);
 }
 else {
-    WARN("Calculating distances between neighboring variants in $vcf_file");
+    if ($vcf_file) {
+        WARN("Calculating distances between neighboring variants in $vcf_file");
+    }
+    elsif ($fof_file) {
+        WARN("Calculating distances between neighboring variants in VCF files listed in $fof_file");
+    }
    ($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges) = calc_distances($vcf_file, $fof_file);
 }
 
