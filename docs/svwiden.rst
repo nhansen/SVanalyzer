@@ -11,7 +11,7 @@ Usage
 ------------
 ::
 
-   svanalyzer widen --ref <reference FASTA file> --variants <VCF-formatted variant file>
+   svanalyzer widen --ref <reference FASTA file> --variants <VCF-formatted variant file> --prefix <prefix for output files>
 
 Options
 ------------
@@ -23,5 +23,6 @@ Options
 **--ref**                         The reference FASTA file for the supplied VCF file or files.
 **--variants**                    A VCF-formatted file of (possibly equivalent) variants to merge.
 **--fof**                         A file of paths to VCF-formatted files to merge.
+**--prefix**                      Prefix for output file names (default: "widened")
 ==========================     =======================================================================================================
 

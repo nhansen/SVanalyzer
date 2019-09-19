@@ -28,5 +28,6 @@ Options
 **--normsizediff**                Disallow matches if alternate alleles have normalized size difference greater than normsizediff (default 1.0)
 **--normdist**                    Disallow matches if alternate alleles have normalized edit distance greater than normdist (default 1.0)
 **--minsize**                     Only include true variants of size >= minsize for recall calculation and test variants >= minsize for precision calculation (default 0)
+**--prefix**                      Prefix for output file names (default: "benchmark")
 ==========================     =======================================================================================================
 
