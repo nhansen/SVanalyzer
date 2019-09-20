@@ -23,6 +23,10 @@ t/utg7180000002239.fa
 t/utg7180000002239.fa.fai
 t/regions.bed
 t/widen.vcf
+t/merge.vcf
+t/merge.fof
+t/merged1.vcf
+t/merged2.vcf
 README.textile
 docs/conf.py
 docs/index.rst

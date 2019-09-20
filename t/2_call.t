@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 12;
+plan tests => 14;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -62,9 +62,17 @@ SKIP: {
     like $out, qr/NumExactMatchSVs=1/, "$script exactcluster";
     $out = `awk -F"\t" '\$2=="HG2_Ill_GATKHC_1" \&\& \$3=="HG3_Ill_GATKHC_2" {print \$6}' t/merged.distances`;
     ok($out == -34, "$script widensmall");
+    system("perl -w -I blib/lib $script --fof t/merge.fof --prefix t/mergedfof --ref t/hs37d5_1start.fa > t/test3a.out 2>&1");
+    $out = `awk -F"\t" '\$2==533244 {print \$8}' t/mergedfof.clustered.vcf`;
+    like $out, qr/ExactMatchIDs=5/, "$script fofoptionworks";
+    $out = `awk -F"\t" '\$4=="<INS>" {print}' t/mergedfof.clustered.vcf`;
+    ok($out == "", "$script seqspecificoption");
     #system("rm t/merged.vcf");
     #system("rm t/merged.distances");
     #system("rm t/test3.out");
+    #system("rm t/mergedfof.vcf");
+    #system("rm t/mergedfof.distances");
+    #system("rm t/test3a.out");
 }
 
 SKIP: {
