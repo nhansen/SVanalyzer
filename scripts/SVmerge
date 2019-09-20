@@ -87,7 +87,7 @@ else {
 if (!$Opt{skip_clusters}) {
     WARN("Writing vcf file $vcf_output of clustered variants");
     my ($rh_cluster_info, $rh_all_clustered_variants) = find_clusters($rh_distances, $ra_nodes, $rh_nodes, $ra_node_edges);
-    write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants);
+    write_cluster_vcf($vcf_file, $fof_file, $vcf_output, $rh_cluster_info, $rh_all_clustered_variants, $rh_nodes);
 }
 
 WARN("Done");
@@ -98,8 +98,8 @@ WARN("Done");
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( max_dist => 2000, prefix => 'merged', relshift => 1.0, relsizediff => 1.0, reldist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
+    %Opt = ( max_dist => 2000, prefix => 'merged', relshift => 0.2, relsizediff => 0.2, reldist => 0.2 );
+    GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters seqspecific nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge, ", q$Revision:$, "\n"; }
@@ -383,6 +383,7 @@ sub write_cluster_vcf {
     my $vcf_output = shift;
     my $rh_cluster_info = shift;
     my $rh_clustered_variants = shift;
+    my $rh_node_index = shift;
 
     my $sortedvcf_fh = open_files_and_sort($vcf_file, $fof_file);
     my $newvcf_fh = Open($vcf_output, "w");
@@ -409,8 +410,10 @@ sub write_cluster_vcf {
             if ($rh_cluster_info->{$id_field}) { # this is a cluster rep!
                 write_vcf_line_with_info($newvcf_fh, \@fields, $rh_cluster_info->{$id_field}, $ra_allowed_info_fields);
             }
-            elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print
-                write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
+            elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print unless --seqspecific option is specified and variant has been skipped for clustering
+                if ((defined($rh_node_index->{$id_field})) || !$Opt{seqspecific}) {
+                    write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
+                }
             }
         }
     }
