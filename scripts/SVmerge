@@ -227,6 +227,14 @@ sub calc_distances {
     
         next if (!($rh_sv->{chrom}));
     
+        my $id2 = $rh_sv->{id};
+        my $index2 = $node_index{$id2};
+        if (!(defined($index2))) {
+            push @nodes, $id2;
+            $index2 = $#nodes + 1;
+            $node_index{$id2} = $index2;
+        }
+
         # check sorted:
         check_sort($rh_current_last_sv, $rh_sv);
         $rh_current_last_sv = $rh_sv;
@@ -250,6 +258,17 @@ sub calc_distances {
                 my $comp_obj = NHGRI::SVanalyzer::Comp->new(-ref_fasta => $ref_fasta, 
                                                             -sv1_info => $rh_neighborhood_sv,
                                                             -sv2_info => $rh_sv);
+
+                # assign nodes if needed:
+                my $id1 = $rh_neighborhood_sv->{id};
+ 
+                my $index1 = $node_index{$id1};
+                if (!(defined($index1))) {
+                    push @nodes, $id1;
+                    $index1 = $#nodes + 1;
+                    $node_index{$id1} = $index1;
+                }
+ 
                 if (($rh_neighborhood_sv->{chrom} eq $rh_sv->{chrom}) && (abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos}) <= $max_distance) &&
                      $comp_obj->potential_match( -relsizediff => $max_relsizediff, -relshift => $max_relshift)) {
                     my $rh_distance_metrics = $comp_obj->calc_distance();
@@ -268,23 +287,9 @@ sub calc_distances {
                     my $d2 = abs($size_diff)/$shared_denominator;
                     # divide edit distance by the minimum alternate haplotype length:
                     my $d3 = abs($edit_dist)/$shared_denominator;
-                    my $id1 = $rh_neighborhood_sv->{id};
-                    my $id2 = $rh_sv->{id};
                     print $dist_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
                     if ($pos_diff <= $max_distance && $d1 <= $max_relshift &&
                         $d2 <= $max_relsizediff && $d3 <= $max_reldist) {
-                        my $index1 = $node_index{$id1};
-                        if (!(defined($index1))) {
-                            push @nodes, $id1;
-                            $index1 = $#nodes + 1;
-                            $node_index{$id1} = $index1;
-                        }
-                        my $index2 = $node_index{$id2};
-                        if (!(defined($index2))) {
-                            push @nodes, $id2;
-                            $index2 = $#nodes + 1;
-                            $node_index{$id2} = $index2;
-                        }
                         push @{$node_edges[$index1 - 1]}, $index2 - 1;
                         push @{$node_edges[$index2 - 1]}, $index1 - 1;
                         my $idlesser = (($id1 cmp $id2) > 0) ? 
@@ -411,8 +416,10 @@ sub write_cluster_vcf {
                 write_vcf_line_with_info($newvcf_fh, \@fields, $rh_cluster_info->{$id_field}, $ra_allowed_info_fields);
             }
             elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print unless --seqspecific option is specified and variant has been skipped for clustering
+                DEBUG("ID $id_field is a singleton--will print VCF record unless it was not initially considered due to --seqspecific");
                 if ((defined($rh_node_index->{$id_field})) || !$Opt{seqspecific}) {
                     write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
+                    DEBUG("Wrote ID $id_field to VCF file");
                 }
             }
         }
