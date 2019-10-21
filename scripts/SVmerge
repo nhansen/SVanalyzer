@@ -622,6 +622,10 @@ Specify the path to a VCF file of variants to merge. These variants will be cons
 
 Specify the path to a file of files with paths to VCF files of variants to merge. These variants will be considered in combination with any specified using the --variants option.
 
+=item B<--maxdist>
+
+Specify the maximum distance in bases between the positions of SVs that can be merged.
+
 =back
 
 =head1 AUTHOR
