@@ -53,9 +53,10 @@ my $prefix = $Opt{prefix};
 my $vcf_output = $prefix.".clustered.vcf";
 my $dist_output = $prefix.".distances";
 my $dist_input = $Opt{distance_file};
+my $min_size = $Opt{'minsize'};
 
 # Threshold options:
-my $max_distance = $Opt{max_dist};
+my $max_distance = $Opt{maxdist};
 my $max_relshift = $Opt{relshift};
 my $max_relsizediff = $Opt{relsizediff};
 my $max_reldist = $Opt{reldist};
@@ -98,8 +99,8 @@ WARN("Done");
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( max_dist => 2000, prefix => 'merged', relshift => 0.2, relsizediff => 0.2, reldist => 0.2 );
-    GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s max_dist=i relshift=f relsizediff=f reldist=f skip_clusters seqspecific nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
+    %Opt = ( maxdist => 2000, prefix => 'merged', relshift => 0.2, relsizediff => 0.2, reldist => 0.2, minsize => 0 );
+    GetOptions(\%Opt, qw( ref=s variants=s fof=s distance_file=s maxdist=i relshift=f relsizediff=f reldist=f minsize=i skip_clusters seqspecific nocleanup prefix=s manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVmerge, ", q$Revision:$, "\n"; }
@@ -337,8 +338,16 @@ sub retrieve_next_sorted_sv {
             return {};
         }
         else { # check for END= INFO tag
-            warn "Skipping non-ATGC ref or alt:$next_line";
+            INFO("Skipping non-ATGC ref or alt:$next_line");
             return {};
+        }
+
+        if ($min_size) { # skip SVs that are too small and return empty hash
+            my $svsize = ($reflength > $altlength) ? $reflength - $altlength : $altlength - $reflength;
+            if ($svsize < $min_size) {
+                INFO("Skipping variant $id--size smaller than specified minimum of $min_size");    
+                return {};
+            } 
         }
 
         return {'chrom' => $chrom, 'pos' => $start, 'start' => $start, 'end' => $end, 'id' => $id, 'ref' => $ref,
@@ -480,7 +489,7 @@ sub analyze_cluster {
             if (!$this_dist1 && !$this_dist2 && !$this_dist3) { # exact match--merge exact clusters
                 if ($node_cluster{$idlesser} != $node_cluster{$idgreater}) { # different clusters merge greater into lesser
                     if (!($exact_clusters[$node_cluster{$idgreater}])) {
-                        WARN("Empty node cluster for $idgreater being merged into $idlesser!");
+                        INFO("Empty node cluster for $idgreater being merged into $idlesser!");
                     }
                     my $old_cluster_index = $node_cluster{$idgreater};
                     my $new_cluster_index = $node_cluster{$idlesser};
