@@ -31,7 +31,7 @@ SKIP: {
     like $out, qr/REPTYPE=SIMPLEINS/, "$script vartype";
     system("perl -w -I blib/lib $script --delta t/refine.qdelta --regions t/regions.bed --outvcf t/refined.vcf --ref_fasta t/hs37d5_1start.fa --query_fasta t/utg7180000002239.fa --svregions t/refine.sv.bed --includeseqs > t/refine.out 2>&1");
     $out = `wc -l t/refine.sv.bed`;
-    like $out, qr/^\s*3\s/, "$script svregions";
+    like $out, qr/^\s*4\s/, "$script svregions";
     $out = `awk -F"\t" '\$2==1074450 {print \$6}' t/refine.sv.bed`;
     like $out, qr/REPTYPE=CONTRAC/, "$script svbedregions";
 }
