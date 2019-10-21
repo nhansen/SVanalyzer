@@ -311,9 +311,10 @@ sub process_region {
             foreach my $rh_entrypair (@{$ra_qentry_pairs}) {
                 push @contig_aligns, @{$rh_entrypair->{aligns}};
             }
-            my @sorted_contigaligns = ($comp) ? 
-                      sort {($b->{query_start} <=> $a->{query_start}) || ($b->{query_end} <=> $a->{query_end})} @contig_aligns : 
-                      sort {($a->{query_start} <=> $b->{query_start}) || ($a->{query_end} <=> $b->{query_end})} @contig_aligns;
+            #my @sorted_contigaligns = ($comp) ? 
+                      #sort {($b->{query_start} <=> $a->{query_start}) || ($b->{query_end} <=> $a->{query_end})} @contig_aligns : 
+                      #sort {($a->{query_start} <=> $b->{query_start}) || ($a->{query_end} <=> $b->{query_end})} @contig_aligns;
+            my @sorted_contigaligns = sort {($a->{ref_start} <=> $b->{ref_start}) || ($a->{ref_end} <=> $b->{ref_end})} @contig_aligns;
 
             # pull contiguous set of contig alignments in region aligned to reference region:
             my @region_aligns = pull_region_contig_aligns(\@sorted_contigaligns, $chrom, $refleftend, $refrightstart);
@@ -432,7 +433,7 @@ sub process_region {
                     my $middle_align = $inversion_aligns[1];
                     my $right_align = $inversion_aligns[2];
         
-                    process_inversion($alignset_obj, $left_align, $middle_align, $right_align); #, $chrom, $contig,
+                    write_inversion($ra_vcf_lines, $chrom, $contig, $alignset_obj, $left_align, $middle_align, $right_align);
                 }
             }
             elsif (@ref_aligns>3) {
@@ -491,7 +492,6 @@ sub find_valid_entry_pairs {
         }
         else {
             WARN("Odd line up of alignments for contig $rh_entrypair->{query_entry}\n");
-            next;
         }
     }
 
@@ -504,13 +504,19 @@ sub pull_region_contig_aligns {
     my $refleftend = shift;
     my $refrightstart = shift;
 
+    # retrieve a contiguous set of aligns which can reveal one or more SVs across the region. If comp switches, get a third in case its an inversion
     my $in_region = 0;
     my @region_aligns = ();
-    foreach my $rh_contigalign (@{$ra_contigaligns}) { # these should in theory be stepping up through the reference, down through the contig for comp aligns
+    for (my $i=0; $i<=$#{$ra_contigaligns}; $i++) {
+        my $rh_contigalign = $ra_contigaligns->[$i];
         if (!($in_region) && ($rh_contigalign->{ref_entry} eq $chrom && $rh_contigalign->{ref_end} > $refleftend)) {
            $in_region = 1;
         }
         elsif (($in_region) && ($rh_contigalign->{ref_entry} eq $chrom && $rh_contigalign->{ref_start} > $refrightstart)) {
+            if (($#region_aligns==1) && ($region_aligns[0] != $region_aligns[1])) {
+                push @region_aligns, $rh_contigalign;
+                WARN("Pushing extra alignment for inversion detection");
+            }
             last;
         }
 
@@ -559,11 +565,17 @@ sub find_breaks {
     return @valid_breaks;
 }
 
-sub process_inversion {
+sub write_inversion {
+    my $ra_vcf_lines = shift;
+    my $chrom = shift;
+    my $varcontig = shift;
     my $alignset_obj = shift;
     my $left_align = shift;
     my $middle_align = shift;
     my $right_align = shift;
+
+    my $reflength = $ref_db->len($chrom);
+    my $querylength = $query_db->len($varcontig);
 
     my $ref1 = $left_align->{ref_end};
     my $ref2 = $middle_align->{ref_start};
@@ -580,6 +592,60 @@ sub process_inversion {
     my $thirdcomp = $right_align->{comp};
 
     WARN("INVERSION refs $ref1 $ref2 $ref3 $ref4 queries $query1 $query2 $query3 $query4 comp $firstcomp/$secondcomp/$thirdcomp\n");
+        
+    my $compstring = ($firstcomp) ? '_comp' : '';
+    my $pos = $ref1;
+    my $end = $ref4 - 1;
+
+    my $altstart = $query1;
+    my $altend = $query4 - 1;
+
+    my $svsize = abs($end - $pos) - abs($altend - $altstart);
+
+    my $refseq = 'N';
+    my $altseq = '<INV>';
+
+    if ($Opt{includeseqs}) {
+        if ($pos >= 1 && $end <= $reflength) {
+            $refseq = uc($ref_db->seq($chrom, $pos, $end));
+        }
+        else {
+            WARN("Ref position of $chrom:$pos-$end is not within chromosome $chrom boundaries--skipping!\n");
+            return;
+        }
+
+        if ($altend > $altstart) { # extract and check:
+            $altseq = uc($query_db->seq($varcontig, $altstart, $altend)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
+            if ($altseq =~ /[^ATGCatgcNn]/) { # foundit!
+                WARN("Seq $varcontig:$altstart-$altend has non ATGC char!\n");
+            }
+        }
+        else { # sequence needs to be complemented 
+            my $singlebase = $query_db->seq($varcontig, $altstart, $altstart);
+            $altseq = uc($query_db->seq($varcontig, $altend, $altstart + 1)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
+            if ($altseq =~ /[^ATGCatgcNn]/) {
+                WARN("Seq $varcontig:$altend-$altstart has non ATGC char!\n");
+            }
+        }
+    }
+
+    # check that the sizes are reasonable:
+    my $al_ratio = 2*abs($svsize)/(abs($end - $pos) + abs($altend - $altstart));
+
+    if ($al_ratio >= 0.1) { # asymmetric inversion
+        return;
+    }
+
+    my $repbases = $ref1 - $ref2;
+
+    my $bs_ratio = 2*abs($repbases)/(abs($end - $pos) + abs($altend - $altstart));
+
+    if ($bs_ratio >= 5.0) { # nearly all repeat
+        return;
+    }
+
+    my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=INV;REPTYPE=INV;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2-$ref3;ALTPOS=$varcontig:$query1-$query4$compstring;ALTWIDENED=$varcontig:$query2-$query3$compstring";
+    push @{$ra_vcf_lines}, "$varstring";
 
 }
 
