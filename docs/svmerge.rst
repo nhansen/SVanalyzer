@@ -43,7 +43,7 @@ Options
 **--variants**                    A VCF-formatted file of (possibly equivalent) variants to merge.
 **--fof**                         A file of paths to VCF-formatted files to merge.
 **--prefix**                      Prefix for output file names (default "merged")
-**--max_dist**                    Maximum distance between pairs of variants to perform comparison for potential merging (default: 2000)
+**--maxdist**                    Maximum distance between pairs of variants to perform comparison for potential merging (default: 2000)
 **--reldist**                     Maximum allowable edit distance, normalized by the mean length of larger allele for the two variants, in an alignment used to merge two variants (default: 0.2)
 **--relsizediff**                 Maximum allowable alt allele size difference, normalized by the mean length of larger allele for the two variants, to merge two variants (default: 0.2)
 **--relshift**                    Maximum allowable shift, normalized by the mean length of the larger allele for the two variants, in an alignment used to merge two variants (default: 0.2)
