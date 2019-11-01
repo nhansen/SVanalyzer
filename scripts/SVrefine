@@ -594,14 +594,18 @@ sub write_inversion {
     WARN("INVERSION refs $ref1 $ref2 $ref3 $ref4 queries $query1 $query2 $query3 $query4 comp $firstcomp/$secondcomp/$thirdcomp\n");
         
     my $compstring = ($firstcomp) ? '_comp' : '';
+
+    # regardless of complementation, ref seq will be sequence from ref1/end of left align (inclusive) to ref4/beginning of right align - 1:
     my $pos = $ref1;
     my $end = $ref4 - 1;
 
+    # calculate length of middle section of query for size calculation
     my $altstart = $query1;
     my $altend = $query4 - 1;
 
     my $svsize = abs($end - $pos) - abs($altend - $altstart);
 
+    # in case we're not reporting allele sequences:
     my $refseq = 'N';
     my $altseq = '<INV>';
 
@@ -614,15 +618,20 @@ sub write_inversion {
             return;
         }
 
-        if ($altend > $altstart) { # extract and check:
-            $altseq = uc($query_db->seq($varcontig, $altstart, $altend)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
-            if ($altseq =~ /[^ATGCatgcNn]/) { # foundit!
+        # check contig coords:
+        if (($altstart < 1) || ($altstart > $querylength) || ($altend < 1) || ($altend > $querylength - 2)) {
+            WARN("Query position of $varcontig:$altstart-$altend is not within contig boundaries--skipping!\n");
+            return;
+        }
+
+        if (!$firstcomp) { # contig as a whole is aligned uncomplemented to the reference, extract and check:
+            $altseq = uc($query_db->seq($varcontig, $altstart, $altend)); # the sequence will be complement of ref, but retrieve in uncomplemented order from query
+            if ($altseq =~ /[^ATGCatgcNn]/) { # uh oh!
                 WARN("Seq $varcontig:$altstart-$altend has non ATGC char!\n");
             }
         }
         else { # sequence needs to be complemented 
-            my $singlebase = $query_db->seq($varcontig, $altstart, $altstart);
-            $altseq = uc($query_db->seq($varcontig, $altend, $altstart + 1)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
+            $altseq = uc($query_db->seq($varcontig, $altend + 2, $altstart)); # GTB::FASTA will reverse complement if necessary unless altpos = altend
             if ($altseq =~ /[^ATGCatgcNn]/) {
                 WARN("Seq $varcontig:$altend-$altstart has non ATGC char!\n");
             }
