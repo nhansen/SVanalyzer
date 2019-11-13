@@ -228,8 +228,37 @@ sub discover_regions {
             }
         }
     }
-    INFO("Discovered $no_regions regions\n");
-    return {%regions_hash};
+    INFO("Discovered $no_regions regions--merging\n");
+
+    my %merged_regions_hash = ();
+    foreach my $chrom (keys %regions_hash) {
+        my ($current_start, $current_end) = (0, 0);
+        foreach my $ra_endpoints (sort bystartthenend @{$regions_hash{$chrom}}) {
+            my ($this_start, $this_end) = @{$ra_endpoints};
+            if ($this_start > $current_end) { # break--start new region
+                # first--is there an old one?
+                if ($current_end) {
+                    push @{$merged_regions_hash{$chrom}}, [$current_start, $current_end];
+                }
+                $current_start = $this_start;
+                $current_end = $this_end;
+            }
+            elsif ($this_end > $current_end) { # overlaps--extend endpoint if necessary
+                $current_end = $this_end;
+            }
+        }
+        # push final region if there is one:
+        push @{$merged_regions_hash{$chrom}}, [$current_start, $current_end];
+    }
+
+    sub bystartthenend {
+        my ($start_a, $end_a) = ($a->[0], $a->[1]);
+        my ($start_b, $end_b) = ($b->[0], $b->[1]);
+        my $ret_val = ($start_a <=> $start_b) ? $start_a <=> $start_b : $end_a <=> $end_b;
+        return $ret_val;
+    }
+
+    return {%merged_regions_hash};
 
 } ## end discover_regions
 
