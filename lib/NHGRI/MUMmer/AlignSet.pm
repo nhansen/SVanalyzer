@@ -344,7 +344,7 @@ sub _extend_exact {
     my $ref_next_pos = $new_ref_end + 1;
     my $query_next_pos = ($comp) ? $new_query_end - 1 : $new_query_end + 1;
 
-    if ($ref_next_pos <= $ref_length && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
+    if ($query_length && $ref_next_pos <= $ref_length && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
         my $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
                                             uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
         my $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
@@ -376,7 +376,7 @@ sub _extend_exact {
     $ref_next_pos = $new_ref_start - 1;
     $query_next_pos = ($comp) ? $new_query_start + 1 : $new_query_start - 1;
 
-    if ($ref_next_pos >= 1 && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
+    if ($query_length && $ref_next_pos >= 1 && $query_next_pos >= 1 && $query_next_pos <= $query_length) {
         my $ref_next_base = ($rh_refseqs) ? uc(substr($rh_refseqs->{$ref_entry}, $ref_next_pos - 1, 1)) : 
                             uc($ref_fasta_db->seq("$ref_entry:$ref_next_pos-$ref_next_pos"));
         my $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
