@@ -61,7 +61,7 @@ while (<$vcf_fh>) {
             print "\n";
         }
     }
-    if (/^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
+    elsif (/^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
         my ($chr, $pos, $var_id, $ref_allele, $alt_allele_string, $score, 
                   $filter, $infotag) =  
                            ($1, $2, $3, $4, $5, $6, $7, $8);
