@@ -382,6 +382,7 @@ sub find_clusters {
         my $nodestring = join ':', @nodenames;
         my ($clustercall, $no_cluster_calls, $dummynodestring, $no_exact_matches, $exactsubcluster, $maxdist1, $maxdist2, $maxdist3) =
                      analyze_cluster($nodestring, $rh_distances);
+        DEBUG("Chose $clustercall as cluster rep");
         $cluster_info{$clustercall} = {'nodestring' => $nodestring, 'exactstring' => $exactsubcluster, 'maxdists' => [$maxdist1, $maxdist2, $maxdist3]};
         foreach my $nodename (@nodenames) {
             $clustered_variants{$nodename} = 1;
