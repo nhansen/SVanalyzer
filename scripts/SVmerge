@@ -382,6 +382,7 @@ sub find_clusters {
         my $nodestring = join ':', @nodenames;
         my ($clustercall, $no_cluster_calls, $dummynodestring, $no_exact_matches, $exactsubcluster, $maxdist1, $maxdist2, $maxdist3) =
                      analyze_cluster($nodestring, $rh_distances);
+        DEBUG("Chose $clustercall as cluster rep");
         $cluster_info{$clustercall} = {'nodestring' => $nodestring, 'exactstring' => $exactsubcluster, 'maxdists' => [$maxdist1, $maxdist2, $maxdist3]};
         foreach my $nodename (@nodenames) {
             $clustered_variants{$nodename} = 1;
@@ -422,6 +423,7 @@ sub write_cluster_vcf {
             my $id_field = $fields[2];
 
             if ($rh_cluster_info->{$id_field}) { # this is a cluster rep!
+                DEBUG("ID $id_field is a cluster rep--will print VCF record");
                 write_vcf_line_with_info($newvcf_fh, \@fields, $rh_cluster_info->{$id_field}, $ra_allowed_info_fields);
             }
             elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print unless --seqspecific option is specified and variant has been skipped for clustering
@@ -430,6 +432,9 @@ sub write_cluster_vcf {
                     write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
                     DEBUG("Wrote ID $id_field to VCF file");
                 }
+            }
+            else {
+                DEBUG("Ignoring ID $id_field--clustered but not a cluster rep");
             }
         }
     }
