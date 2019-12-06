@@ -155,10 +155,13 @@ sub calculate_distance_matrix {
             $rh_testsv->{id} = "testsv_".$current_test_id;
             $current_test_id++;
         } 
-        my $test_chrom = $rh_testsv->{chrom}; 
-        my $test_pos = $rh_testsv->{pos}; 
-        my $test_end = $rh_testsv->{end}; 
-        next if ((!($test_chrom)) || (!($test_pos)) || (!($test_end)));
+        my $test_chrom = $rh_testsv->{chrom} || ''; 
+        my $test_pos = $rh_testsv->{pos} || ''; 
+        my $test_end = $rh_testsv->{end} || ''; 
+        if ((!($test_chrom)) || (!($test_pos)) || (!($test_end))) {
+            INFO("Skipping $rh_testsv->{id} with chrom $test_chrom pos $test_pos end $test_end");
+            next;
+        }
         $total_test_svs++;
    
         # be sure @current_neighborhood_true_svs contains only nearby true SVs by deleting if necessary: 
@@ -176,6 +179,7 @@ sub calculate_distance_matrix {
         # add new true SVs until beyond current SV's window:
 
         while (1) {
+            INFO("Adding to true variants in window for test variant $rh_testsv->{id}");
             my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh, $ref_db);
             last if (!$rh_nexttruesv);
             if (!($rh_nexttruesv->{id}) || ($rh_nexttruesv->{id} eq '.') ) { # assign sequential
@@ -223,6 +227,9 @@ sub calculate_distance_matrix {
                 print $distance_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
                 $distances{$id1}->{$id2} = [$pos_diff, $d1, $d2, $d3];
             }
+            else {
+                INFO("No potential match for $rh_testsv->{id} and $rh_truesv->{id}");
+            }
         }
     }
 
@@ -249,7 +256,7 @@ sub construct_variant_command {
 
     $command .= "sort -k1,1 -k2,2n | ";
 
-    INFO("$command");
+    DEBUG("$command");
 
     return $command;
 }
@@ -279,6 +286,7 @@ sub retrieve_next_sorted_sv {
     my $next_line = <$variant_fh>;
 
     if (!$next_line) {
+        INFO("Returning end of file");
         return $next_line;
     }
     chomp $next_line;
@@ -292,6 +300,7 @@ sub retrieve_next_sorted_sv {
  
         my $end; # if we have sequence, end will be determined as last base of REF, otherwise, from END=
         if (($ref =~ /^([ATGCN]+)$/) && ($alt =~ /^([ATGCN]+)$/)) {
+            INFO("Processing sequence-specific SV $id");
             $end = $start + $reflength - 1;
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
@@ -299,13 +308,14 @@ sub retrieve_next_sorted_sv {
             return {};
         }
         elsif (($alt eq '<DEL>') && ($info =~ /;END=(\d+);{0,1}/ || $info =~ /^END=(\d+);{0,1}/)) { # use end tag
-            my $end = $1;
+            $end = $1;
             my $smo = $start - 1;
             $ref = uc($ref_db->seq("$chrom:$smo-$end"));
             $alt = substr($ref, 0, 1); # first character of reference
+            INFO("Calculating sequence for deletion $id");
         }
         else { # don't know how to handle this
-            WARN("Skipping non-ATGC ref or alt record: $next_line");
+            INFO("Skipping non-ATGC ref or alt record: $next_line");
             return {};
         }
 
