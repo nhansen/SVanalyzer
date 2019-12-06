@@ -31,3 +31,20 @@ Options
 **--prefix**                      Prefix for output file names (default: "benchmark")
 ==========================     =======================================================================================================
 
+Description
+------------
+
+For sequence-specified test and truth structural variants in VCF files (i.e., files with ATGC sequences in the REF and
+ALT fields), SVbenchmark aligns constructed alternate haplotypes of each test/truth variant pair separated by no more
+than the distance specified by the --maxdist option to determine if the pair
+represent two equivalent variants.
+
+In the false positive output VCF file, the program reports all test variants that are not equivalent to any true
+variant. In the false negative output VCF file, the program reports all true variants that are not equivalent to
+any test variant. The recall rate is reported in the report file as the percentage of true variants that are not
+false negatives, and the precision is reported as the percentage of test variants that are not false positives.
+
+As of SVanalyzer v0.33, SVbenchmark will include non-sequence-specified deletions in its comparisons so long as
+the ALT field values of the VCF deletion records are "<DEL>" and an END value is include in the INFO field (e.g.,
+END=5289355).
+
