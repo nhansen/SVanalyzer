@@ -148,7 +148,9 @@ sub potential_match {
   and returns a hash of different distance metrics 
   measuring how different the two variants are.
 
-  Input:  None.
+  Input:  If the second and third arguments are the key
+          '-nocleanup' and a true value, will leave comparison
+          fasta files and alignment output in place.
   Output: Reference to a hash containing distance metrics.
 
 =cut
@@ -210,7 +212,7 @@ sub calc_distance {
     }
     else {
         # align the alternative haplotypes to each other and evaluate
-        my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2);
+        my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2, '-nocleanup',  $params{'-nocleanup'});
         #if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
         if (abs($maxshift) < $minsvsize) {
             my $matchtype = 'NWMATCH';
@@ -309,7 +311,11 @@ sub compare_alt_haplotypes {
     my $id2 = shift || 'seq2';
     my %params = @_;
 
-    my $workingdir = tempdir( CLEANUP => 1);
+    if (!$params{'-nocleanup'}) {
+        $params{'-nocleanup'} = 0;
+    }
+
+    my $workingdir = tempdir( CLEANUP => !($params{'-nocleanup'}), DIR => '.');
     my $tmpfasta1 = "$workingdir/$id1.$id2.fa";
     $self->write_fasta_file($tmpfasta1, "$id1\_alt", $rs_alt1);
     my $tmpfasta2 = "$workingdir/$id2.$id1.fa";

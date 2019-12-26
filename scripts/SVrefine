@@ -207,13 +207,19 @@ sub discover_regions {
         foreach my $entry_pair (@{$ra_rentry_pairs}) {
             my $current_end;
             my @aligns = @{$entry_pair->{aligns}};
-            foreach my $rh_align (sort byleftthenright @aligns) {
+            foreach my $rh_align (sort byleftthenright @aligns) { # left to right along reference
                 if ($current_end) {
                     if ($rh_align->{ref_start} < $current_end) { # overlap
-                        push @{$regions_hash{$chrom}}, [$rh_align->{ref_start}, $current_end];
+                        if (($Opt{maxsize}) && $current_end - $rh_align->{ref_start} < $Opt{maxsize}) {
+                            push @{$regions_hash{$chrom}}, [$rh_align->{ref_start}, $current_end];
+                        }
+                        DEBUG("OVERLAP $chrom:$rh_align->{ref_start}-$current_end\n");
                     }
-                    else {
-                        push @{$regions_hash{$chrom}}, [$current_end, $rh_align->{ref_start}];
+                    else { # gap
+                        if (($Opt{maxsize}) && $rh_align->{ref_start} - $current_end < $Opt{maxsize}) {
+                            push @{$regions_hash{$chrom}}, [$current_end, $rh_align->{ref_start}];
+                        }
+                        DEBUG("GAP $chrom:$current_end-$rh_align->{ref_start}\n");
                     }
                     $no_regions++;
                 }
