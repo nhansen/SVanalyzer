@@ -83,7 +83,7 @@ sub process_commandline {
     # Set defaults here
     %Opt = ( samplename => 'SAMPLE', buffer => 0, bufseg => 50, maxsize => 0, prefix => 'SVrefine' );
     GetOptions(\%Opt, qw( bam=s delta=s regions=s ref_fasta=s query_fasta=s outvcf=s outref=s
-                          nocov=s buffer=i svregions=s bufseg=i maxsize=i prefix=s verbose
+                          nocov=s buffer=i svregions=s bufseg=i maxsize=i prefix=s verbose debug
                           includeseqs samplename=s noheader manual help+ version)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
@@ -923,6 +923,13 @@ file path is provided using the --delta option on the command line,
 the script uses the query path obtained by parsing the delta file's
 first line. (Optional).
 
+=item B<--prefix <prefix to be used in output file names>>
+
+Specify a string to use as the prefix to output files created by this 
+program. Unless specified by a different option,
+the output VCF file will be <prefix>.vcf.gz, the log file will be 
+<prefix>.log, etc. (Default: "SVrefine")
+
 =item B<--outvcf <path to which to write a new VCF-formatted file>>
 
 Specify the path to which to write a new VCF file containing the structural
@@ -962,6 +969,10 @@ tag in the variant VCF. (Optional).
 
 Write sequences from the reference FASTA file into the "REF" and "ALT" fields of
 the VCF.
+
+=item B<--verbose>
+
+Write verbose output, debugging information, etc. to the log file.
 
 =item B<--help|--manual>
 

@@ -116,7 +116,7 @@ WARN("Done");
 sub process_commandline {
     # Set defaults here
     %Opt = ( maxdist => 100000, prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f manual help+ version verbose debug)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -207,7 +207,7 @@ sub calculate_distance_matrix {
             if (($rh_truesv->{chrom} eq $rh_testsv->{chrom}) && 
                   (abs($rh_testsv->{pos} - $rh_truesv->{pos}) <= $max_distance) &&
                   ($comp_obj->potential_match())) {
-                my $rh_distance_metrics = $comp_obj->calc_distance();
+                my $rh_distance_metrics = $comp_obj->calc_distance('-nocleanup' => $Opt{'nocleanup'});
                 my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                 my $max_shift = $rh_distance_metrics->{'max_shift'};
                 my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
