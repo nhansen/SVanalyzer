@@ -210,18 +210,19 @@ sub discover_regions {
             foreach my $rh_align (sort byleftthenright @aligns) { # left to right along reference
                 if ($current_end) {
                     if ($rh_align->{ref_start} < $current_end) { # overlap
-                        if (($Opt{maxsize}) && $current_end - $rh_align->{ref_start} < $Opt{maxsize}) {
+                        if ((!$Opt{maxsize}) || ($current_end - $rh_align->{ref_start} < $Opt{maxsize})) {
                             push @{$regions_hash{$chrom}}, [$rh_align->{ref_start}, $current_end];
+                            DEBUG("OVERLAP $chrom:$rh_align->{ref_start}-$current_end\n");
+                            $no_regions++;
                         }
-                        DEBUG("OVERLAP $chrom:$rh_align->{ref_start}-$current_end\n");
                     }
                     else { # gap
-                        if (($Opt{maxsize}) && $rh_align->{ref_start} - $current_end < $Opt{maxsize}) {
+                        if ((!$Opt{maxsize}) || ($rh_align->{ref_start} - $current_end < $Opt{maxsize})) {
                             push @{$regions_hash{$chrom}}, [$current_end, $rh_align->{ref_start}];
+                            DEBUG("GAP $chrom:$current_end-$rh_align->{ref_start}\n");
+                            $no_regions++;
                         }
-                        DEBUG("GAP $chrom:$current_end-$rh_align->{ref_start}\n");
                     }
-                    $no_regions++;
                 }
                 $current_end = $rh_align->{ref_end};
             }
@@ -238,6 +239,7 @@ sub discover_regions {
 
     my %merged_regions_hash = ();
     foreach my $chrom (keys %regions_hash) {
+        DEBUG("Considering chrom $chrom for merging.");
         my ($current_start, $current_end) = (0, 0);
         foreach my $ra_endpoints (sort bystartthenend @{$regions_hash{$chrom}}) {
             my ($this_start, $this_end) = @{$ra_endpoints};
@@ -245,6 +247,7 @@ sub discover_regions {
                 # first--is there an old one?
                 if ($current_end) {
                     push @{$merged_regions_hash{$chrom}}, [$current_start, $current_end];
+                    DEBUG("Pushed a new merged region at $chrom:$current_start-$current_end");
                 }
                 $current_start = $this_start;
                 $current_end = $this_end;
@@ -255,6 +258,7 @@ sub discover_regions {
         }
         # push final region if there is one:
         push @{$merged_regions_hash{$chrom}}, [$current_start, $current_end];
+        DEBUG("Pushed a new merged region at $chrom:$current_start-$current_end");
     }
 
     sub bystartthenend {
