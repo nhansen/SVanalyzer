@@ -9,6 +9,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Log::Log4perl qw(:easy);
+use List::MoreUtils qw(uniq);
 use GTB::File qw(Open);
 use GTB::FASTA;
 use NISC::Sequencing::Date;
@@ -837,7 +838,7 @@ sub write_variants_to_vcf {
     # write VCF lines in order, adding genotypes and avoiding redundancy:
     my @sorted_vcf_lines = sort byposthenend @{$ra_variant_lines};
 
-    foreach my $vcf_line (@sorted_vcf_lines) {
+    foreach my $vcf_line (uniq @sorted_vcf_lines) {
         my ($pos, $end) = ($vcf_line =~ /^(\S+)\s(\d+).*END=(\d+)/) ? ($2, $3) : (0, 0);
         next if ($vcf_line =~ /N{50}/); # don't write variants that are due to scaffolding
         my $gt = covered($ra_ref_cov, $pos, $end) ? '0/1' : '1';

@@ -194,6 +194,12 @@ sub calc_distance {
     my $right_bound = ($end1 < $end2) ? $end2 : $end1;
     my $rs_alt_hap1 = $self->construct_alt_hap(-left_bound => $left_bound, -right_bound => $right_bound, -svhashref => $rh_sv1);
     my $rs_alt_hap2 = $self->construct_alt_hap(-left_bound => $left_bound, -right_bound => $right_bound, -svhashref => $rh_sv2);
+
+    if (($rs_alt_hap1 == -1) || ($rs_alt_hap2 == -1)) {
+        print STDERR "$chrom:$right_bound is past end of chromosome--skipping comparison of $id1 and $id2\n";
+        return {};
+    }
+    
     my $minhaplength = (length(${$rs_alt_hap1}) < length(${$rs_alt_hap2})) ? length(${$rs_alt_hap1}) : length(${$rs_alt_hap2});
     my $althaplength_avg = (length(${$rs_alt_hap1}) + length(${$rs_alt_hap2}))/2.0;
     my $althaplength_diff = length(${$rs_alt_hap1}) - length(${$rs_alt_hap2});
@@ -259,7 +265,9 @@ sub calc_distance {
           -svhashref - reference to a hash containing the SV
           call
 
-  Output: reference to string containing the alternate haplotype.
+  Output: reference to string containing the alternate haplotype,
+          or a numerical error code:
+          -1: right bound is past end of chromosome.
 
 =cut
 
@@ -274,6 +282,16 @@ sub construct_alt_hap {
     my $right_bound = $params{-right_bound};
 
     my $chrom = $rh_sv->{chrom};
+    my $chrom_length = $self->{fasta_db}->len($chrom);
+
+    if (!(defined($chrom_length))) {
+        die "Chromosome $chrom has no length in fasta database!\n";
+    }
+
+    if ($right_bound > $chrom_length) {
+        return -1;
+    }
+
     my $alt_allele = uc($self->{fasta_db}->seq("$chrom:$left_bound-$right_bound")); # widened ref
     my $svstart = $rh_sv->{'pos'};
     my $offset = $svstart - $left_bound; # number of positions to move from first included base to ref start
@@ -325,6 +343,7 @@ sub compare_alt_haplotypes {
     my $nw_output = `$edlib_aligner -p -f CIG_STD $tmpfasta1 $tmpfasta2`;   
     unlink $tmpfasta1 unless ($params{'-nocleanup'});
     unlink $tmpfasta2 unless ($params{'-nocleanup'});
+    rmdir $workingdir unless ($params{'-nocleanup'});
     if ($nw_output =~ /Cigar:\n(.*)/m) {
         my $cigar_string = $1;
         my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';

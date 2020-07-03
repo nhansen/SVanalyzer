@@ -208,6 +208,11 @@ sub calculate_distance_matrix {
                   (abs($rh_testsv->{pos} - $rh_truesv->{pos}) <= $max_distance) &&
                   ($comp_obj->potential_match())) {
                 my $rh_distance_metrics = $comp_obj->calc_distance('-nocleanup' => $Opt{'nocleanup'});
+                if (!(defined($rh_distance_metrics->{'edit_distance'}))) {
+                    WARN("Skipping comparison of $rh_truesv->{id} and $rh_testsv->{id} due to invalid coordinates.");
+                    next;
+                }
+
                 my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                 my $max_shift = $rh_distance_metrics->{'max_shift'};
                 my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};

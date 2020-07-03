@@ -35,7 +35,9 @@ process_commandline();
 my $coordsfile = $Opt{'coords'};
 my $deltafile = $Opt{'delta'};
 my $refregion = $Opt{'refcoords'};
+$refregion =~ s/,//g if ($refregion);
 my $queryregion = $Opt{'querycoords'};
+$queryregion =~ s/,//g if ($queryregion);
 my $format = $Opt{'format'};
 my $prefix = $Opt{'prefix'};
 
@@ -55,8 +57,7 @@ if ($coordsfile) {
     $ra_overlapping_aligns = find_overlapping_alignments($coordsfile, $refregion, $queryregion);
 }
 elsif ($deltafile) {
-    # implement later
-    die "--delta option is not yet implemented.\n";
+    $ra_overlapping_aligns = find_overlapping_delta_aligns($deltafile, $refregion, $queryregion);
 }
 else {
     die "You must specify a coords file with the --coords option or a delta file with the --delta option to run SVplotaligns.\n";
@@ -117,21 +118,73 @@ sub find_overlapping_alignments {
     while (<$coord_fh>) {
         chomp;
         my ($rstart, $rend, $qstart, $qend, $rlength, $qlength, $perciden, $reflength, $querylength, $mmrate, $percmatch, $alignref, $alignquery) = split /\t/, $_;
-        if ((($ref) && ($alignref eq $ref && overlaps($rstart, $rend, $refstart, $refend))) || 
-            (($query) && ($alignquery eq $query && overlaps($qstart, $qend, $querystart, $queryend)))) {
-
-            push @aligns, { 'query' => $alignquery,
-                            'querystart' => $qstart,
-                            'queryend' => $qend,
-                            'ref' => $alignref,
-                            'refstart' => $rstart,
-                            'refend' => $rend };
+        if (!$alignquery) { #
+            print "Misformatted line--skipping\n";
+            next;
         }
+
+        next if (($ref) && ($alignref ne $ref || !overlaps($rstart, $rend, $refstart, $refend)));
+        next if (($query) && ($alignquery ne $query || !overlaps($qstart, $qend, $querystart, $queryend)));
+
+        push @aligns, { 'query' => $alignquery,
+                        'querystart' => $qstart,
+                        'queryend' => $qend,
+                        'ref' => $alignref,
+                        'refstart' => $rstart,
+                        'refend' => $rend };
     }
 
     close $coord_fh;
 
     return [@aligns];
+}
+
+sub find_overlapping_delta_aligns {
+    my $deltafile = shift;
+    my $refregion = shift;
+    my $queryregion = shift;
+
+    my @aligns = ();
+    my ($ref, $refstart, $refend, $query, $querystart, $queryend);
+    if ($refregion && $refregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($ref, $refstart, $refend) = ($1, $2, $3);
+    }
+    if ($queryregion && $queryregion =~ /^(\S+):(\d+)\-(\d+)$/) {
+        ($query, $querystart, $queryend) = ($1, $2, $3);
+    }
+
+    my $delta_obj = NHGRI::MUMmer::AlignSet->new( -delta_file => $deltafile,
+                                                  -ref_entry => $ref,
+                                                  -query_entry => $query,
+                                                  -extend_exact => 1 );
+
+    foreach my $rh_entry_pair (@{$delta_obj->{entry_pairs}}) {
+        next if ($ref && $rh_entry_pair->{ref_entry} ne $ref);
+        next if ($query && $rh_entry_pair->{query_entry} ne $query);
+
+        foreach my $rh_align (@{$rh_entry_pair->{aligns}}) {
+            my $ref_start = $rh_align->{ref_start};
+            my $ref_end = $rh_align->{ref_end};
+            my $query_start = $rh_align->{query_start};
+            my $query_end = $rh_align->{query_end};
+
+            if ((($ref) && overlaps($ref_start, $ref_end, $refstart, $refend)) || 
+                (($query) && overlaps($query_start, $query_end, $querystart, $queryend))) {
+                print "$rh_entry_pair->{ref_entry}:$ref_start-$ref_end\t$rh_entry_pair->{query_entry}:$query_start-$query_end\n";
+                push @aligns, { 'query' => $rh_entry_pair->{query_entry},
+                                'querystart' => $query_start,
+                                'queryend' => $query_end,
+                                'ref' => $rh_entry_pair->{ref_entry},
+                                'refstart' => $ref_start,
+                                'refend' => $ref_end };
+
+            }
+        }
+    }
+
+
+    return [@aligns];
+
 }
 
 sub overlaps {

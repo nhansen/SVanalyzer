@@ -63,6 +63,8 @@ our $VERSION  = '0.01';
           -reference_file - option to set alternate reference file
           (rather than use reference_file present in delta file)
           -query_file - option to set alternate query file
+          -ref_entry - restrict parsing to just this ref entry
+          -query_entry - restrict parsing to just this ref entry
   Output: New AlignSet object
 
 =cut
@@ -80,6 +82,8 @@ sub new {
     my $query_hashref = $params{-query_hashref};
     my $reference_file = $params{-reference_file};
     my $query_file = $params{-query_file};
+    my $ref_entry = $params{-ref_entry};
+    my $query_entry = $params{-query_entry};
     my $verbose = $params{-verbose};
 
     my $self = { delta_file => $delta_file,
@@ -91,6 +95,8 @@ sub new {
                  query_hashref => $query_hashref,
                  reference_file => $reference_file,
                  query_file => $query_file,
+                 ref_entry => $ref_entry,
+                 query_entry => $query_entry,
                  verbose => $verbose,
 
                   };
@@ -127,7 +133,9 @@ sub new {
       aligns - reference to an array of hash reference for each
           align, with keys: 
             ref_start, ref_end, query_start, query_end, mismatches, 
-            nonposmatches, nonalphas, cigar_string
+            nonposmatches, nonalphas, cigar_string. Also 
+            query_low and query_high (where query_low < query_high)
+            for convenience)
         
 
   Input: None.
@@ -156,10 +164,32 @@ sub _parse_delta_file {
                 }
             }
         }
-        elsif (/^\>(\S+)\s(\S+)\s(\d+)\s(\d+)$/) {
+        elsif (/^\>(\S+)\s(\S+)\s(\d+)\s(\d+)$/) { # new ref/query pair entry
             ($ref_entry, $query_entry) = ($1, $2);
+            my ($ref_length, $query_length) = ($3, $4);
+
+            if (($self->{ref_entry} && ($ref_entry ne $self->{ref_entry})) || 
+               ($self->{query_entry} && ($query_entry ne $self->{query_entry}))) {
+
+                # skip this reference entry and advance to a desired one:
+
+                my $found_next_entry = 0;
+                while (<$fh>) {
+                    if ((/^\>(\S+)\s(\S+)\s(\d+)\s(\d+)$/) && # entry line
+                       (!$self->{ref_entry} || ($self->{ref_entry} eq $1)) && # no ref pref or correct ref
+                       (!$self->{query_entry} || ($self->{query_entry} eq $2))) { # no query pref or correct query
+                        ($ref_entry, $query_entry, $ref_length, $query_length) = ($1, $2, $3, $4);
+                        $found_next_entry = 1;
+                        last;
+                    }
+                }
+                if (!$found_next_entry) {
+                    last;
+                }
+            }
+            print STDERR "Parsing entry pair $ref_entry/$query_entry\n";
             push @{$self->{entry_pairs}}, 
-                 {ref_entry => $ref_entry, query_entry => $query_entry, ref_length => $3, query_length => $4};
+                 {ref_entry => $ref_entry, query_entry => $query_entry, ref_length => $ref_length, query_length => $query_length};
         }
         elsif (/^(\d+)\s(\d+)\s(\d+)\s(\d+)\s(\d+)\s(\d+)\s(\d+)$/) {
             my ($ref_start, $ref_end, $query_start, $query_end, $mismatches, $nonposmatches, $nonalphas) = 
@@ -174,12 +204,14 @@ sub _parse_delta_file {
                 $query_start = $new_query_start;
                 $query_end = $new_query_end;
             }
+            my $query_low = ($query_start < $query_end) ? $query_start : $query_end;
+            my $query_high = ($query_start > $query_end) ? $query_start : $query_end;
             my $comp = ($query_start <= $query_end) ? 0 : 1;
             push @{$self->{entry_pairs}->[$#{$self->{entry_pairs}}]->{aligns}}, 
                 {ref_start => $ref_start, ref_end => $ref_end, query_start => $query_start,
                  query_end => $query_end, mismatches => $mismatches, nonposmatches => $nonposmatches,
                  nonalphas => $nonalphas, cigar_string => $cigar_string, ref_entry => $ref_entry,
-                 query_entry => $query_entry, comp => $comp };
+                 query_entry => $query_entry, comp => $comp, query_low => $query_low, query_high => $query_high };
             #print "ALIGNMENT\t$ref_entry\t$ref_start\t$ref_end\t$query_entry\t$query_start\t$query_end\t$comp\n";
             if (!$ref_start || !$ref_end) {
                 die "No ref start or ref end for entry pair $self->{entry_pairs}->[$#{$self->{entry_pairs}}]->{ref_entry} and $self->{entry_pairs}->[$#{$self->{entry_pairs}}]->{query_entry}\n";
@@ -439,6 +471,7 @@ sub find_ref_coords_from_query_coord {
     my $query = shift;
     my $rh_params = shift; # not used yet
 
+    my @relevant_aligns = ();
     my $match_found = 0;
     foreach my $rh_pairentry (@{$self->{entry_pairs}}) {
         next if ($query && $rh_pairentry->{query_entry} ne $query);
@@ -507,6 +540,7 @@ sub find_ref_coords_from_query_coord {
                     die "Cigar string $cigar_string is of the wrong form!\n";
                 }
             }
+            push @relevant_aligns, $rh_align;
             if (!$align_match_found) { # check to be sure we got to the end
                 print STDERR "Reached query $current_query (end is $query_end), ref $current_ref (end is $ref_end) without finding match\n";
             }
@@ -515,7 +549,7 @@ sub find_ref_coords_from_query_coord {
             }
         }
     }
-    return $match_found;
+    return [@relevant_aligns];
 }
 
 ###########################################################
@@ -530,6 +564,8 @@ sub find_ref_coords_from_query_coord {
   Output: Populates each alignment for this reference with a "query_matches"
       field and an entry for the reference position giving the value of 
       the query coordinate that corresponds to the reference position.
+      Returns a reference to a list of alignments containing the desired
+      coordinate.
 
 =cut
 
@@ -541,6 +577,7 @@ sub find_query_coords_from_ref_coord {
     my $rh_params = shift; # not used yet
 
     #print "In find_query_coords!\n";
+    my @relevant_aligns = ();
     foreach my $rh_pairentry (@{$self->{entry_pairs}}) {
         next if ($ref && $rh_pairentry->{ref_entry} ne $ref);
 
@@ -591,8 +628,11 @@ sub find_query_coords_from_ref_coord {
                     die "Cigar string $cigar_string is of the wrong form!\n";
                 }
             }
+            push @relevant_aligns, $rh_align;
         }
     }
+
+    return [@relevant_aligns];
 }
 
 ###########################################################
@@ -673,6 +713,133 @@ sub find_gap_query_coords {
         }
     }
 
+}
+
+###########################################################
+
+=item B<flag_redundant_alignments()>
+
+  This method examines the object's alignments for each entry pair
+  and flags them according to whether they are redundant as determined
+  by the filtering alignment described in Jain et al., Bioinformatics (2018)
+  "A fasta adaptive algorithm for computing whole-genome homology maps"
+
+  Input: AlignSet object
+  Output: Populates two new key/value pairs in each alignment hash with keys
+      "query_redundant" and "ref_redundant", which are 0 or 1 as follows:
+       * query_redundant - 1 if alignment's query coordinates are covered
+              throughout by higher scoring alignments, 0 otherwise
+       * ref_redundant - 1 if alignment's ref coordinates are covered 
+              throughout by higher scoring alignments, 0 otherwise
+
+=cut
+
+###########################################################
+sub flag_redundant_alignments {
+    my $self  = shift;
+
+    my $ra_entry_pairs = $self->{entry_pairs};
+    foreach my $rh_entry_pair (@{$ra_entry_pairs}) {
+        my $refentry = $rh_entry_pair->{ref_entry};
+        my $queryentry = $rh_entry_pair->{query_entry};
+        print STDERR "Flagging pair $refentry $queryentry\n";
+        my $ra_aligns = $rh_entry_pair->{aligns};
+        foreach my $rh_align (@{$ra_aligns}) {
+            $rh_align->{query_redundant} = 1;
+            $rh_align->{ref_redundant} = 1;
+        }
+
+        # find and mark query_redundant:
+        my @sorted_aligns = sort {$a->{query_low} <=> $b->{query_low}} @{$ra_aligns};
+
+        # mark alignments that are non-redundant by query coord:
+        my @query_starts = map {$_->{query_start}} @{$ra_aligns};
+        my @query_ends = map {$_->{query_end}} @{$ra_aligns};
+
+        # sorted list of all endpoints:
+        my $no_query_ends = @query_ends;
+        my $no_query_starts = @query_starts;
+        my $expected_total = $no_query_ends + $no_query_starts;
+        my @all_query_ends = @query_starts;
+        push @all_query_ends, @query_ends;
+
+        @all_query_ends = sort {$a <=> $b} @all_query_ends;
+
+        my $actual_total = @all_query_ends;
+        print STDERR "Expected total $expected_total actual total $actual_total\n";
+
+        my @sweep = ();
+        my $last_end = 0;
+        for (my $i=0; $i<=$#all_query_ends; $i++) {
+            my $no_sweep = @sweep;
+            print STDERR "At endpoint $i with $no_sweep in sweep\n";
+            my $this_end = $all_query_ends[$i];
+            next if ($this_end == $last_end); # don't repeat end values
+            $last_end = $this_end; # new end to process
+            while( (@sorted_aligns) && ($sorted_aligns[0]->{query_low}==$this_end )) {
+                push @sweep, shift @sorted_aligns;
+            }
+
+            my @temp_sweep = ();
+            my $max_score = 0;
+            foreach my $rh_align (@sweep) {
+                if ($rh_align->{query_high} != $this_end) {
+                    push @temp_sweep, $rh_align;
+                    if (($rh_align->{query_high} - $rh_align->{query_low}) > $max_score) {
+                        $max_score = $rh_align->{query_high} - $rh_align->{query_low};
+                    }
+                }
+            }
+            @sweep = @temp_sweep; # keeps only segs that don't end at this end
+            foreach my $rh_align (@sweep) { # mark max score aligns as "good"--scores should have been stored in hash
+                if (($rh_align->{query_high} - $rh_align->{query_low}) == $max_score) {
+                    $rh_align->{query_redundant} = 0;
+                } 
+            }
+        }
+        
+        # find and mark ref_redundant:
+        @sorted_aligns = sort {$a->{ref_start} <=> $b->{ref_start}} @{$ra_aligns};
+
+        # mark alignments that are non-redundant by ref coord:
+        my @ref_starts = map {$_->{ref_start}} @{$ra_aligns};
+        my @ref_ends = map {$_->{ref_end}} @{$ra_aligns};
+
+        # sorted list of all endpoints:
+        my @all_ref_ends = @ref_starts;
+        push @all_ref_ends, @ref_ends;
+        @all_ref_ends = sort {$a <=> $b} @all_ref_ends;
+
+        @sweep = ();
+        $last_end = 0;
+        for (my $i=0; $i<=$#all_ref_ends; $i++) {
+            my $no_sweep = @sweep;
+            print STDERR "At endpoint $i with $no_sweep in sweep\n";
+            my $this_end = $all_ref_ends[$i];
+            next if ($this_end == $last_end); # don't repeat end values
+            $last_end = $this_end;
+            while( (@sorted_aligns) && ($sorted_aligns[0]->{ref_start}==$this_end )) {
+                push @sweep, shift @sorted_aligns;
+            }
+
+            my @temp_sweep = ();
+            my $max_score = 0;
+            foreach my $rh_align (@sweep) {
+                if ($rh_align->{ref_end} != $this_end) {
+                    push @temp_sweep, $rh_align;
+                    if (($rh_align->{ref_end} - $rh_align->{ref_start}) > $max_score) {
+                        $max_score = $rh_align->{ref_end} - $rh_align->{ref_start};
+                    }
+                }
+            }
+            @sweep = @temp_sweep; # keeps only segs that don't end at this end
+            foreach my $rh_align (@sweep) { # mark max score aligns as "good"--scores should have been stored in hash
+                if (($rh_align->{ref_end} - $rh_align->{ref_start}) == $max_score) {
+                    $rh_align->{ref_redundant} = 0;
+                } 
+            }
+        }
+    }
 }
 
 ###########################################################
