@@ -115,7 +115,7 @@ WARN("Done");
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( maxdist => 100000, prefix => 'benchmark', normshift => 1.0, normsizediff => 1.0, normdist => 1.0 );
+    %Opt = ( maxdist => 50000, prefix => 'benchmark', normshift => 0.2, normsizediff => 0.2, normdist => 0.2 );
     GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
