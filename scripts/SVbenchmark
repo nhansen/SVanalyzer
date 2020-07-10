@@ -612,7 +612,7 @@ Maximum allowable normalized shift between matching test and true variants.
 
 Maximum allowable normalized size difference between matching test and true variants.
 
-=item B<--normsizedist <normalized edit distance>>
+=item B<--normdist <normalized edit distance>>
 
 Maximum allowable normalized edit distance between matching test and true variants.
 
