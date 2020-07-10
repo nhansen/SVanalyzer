@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 14;
+plan tests => 16;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -90,7 +90,7 @@ SKIP: {
 
 	SKIP: {
 	    # Test SVbenchmark:
-	    ($has_samtools && $has_edlib) or skip "Skipping SVbenchmark tests because one of samtools or edlib-aligner is missing from path", 2;
+	    ($has_samtools && $has_edlib) or skip "Skipping SVbenchmark tests because one of samtools or edlib-aligner is missing from path", 4;
 	    $script = 'blib/script/SVbenchmark';
 	    
 	    mkdir "t/test";
@@ -100,6 +100,12 @@ SKIP: {
 	    system("perl -w -I blib/lib $script --test t/benchmark.test.vcf --truth t/benchmark.truth.vcf --minsize 10000 --prefix t/benchmark.minsize --ref t/hs37d5_1start.fa  > t/test5.out 2>&1");
 	    $out = `grep 'Precision' t/benchmark.minsize.report | awk '{print \$NF}'`;
 	    like $out, qr/0.00/, "$script precision";
+	    system("perl -w -I blib/lib $script --test t/minreadtest.vcf --truth t/minreadtruth.vcf --prefix t/benchmark.minreadsupport --minreadsupport 10 --ref t/hs37d5_1start.fa --verbose > t/test6.out 2>&1");
+	    $out = `grep 'Recall' t/benchmark.minreadsupport.report | awk '{print \$NF}'`;
+	    like $out, qr/36\.36/, "$script minreadsupport recall";
+	    system("perl -w -I blib/lib $script --test t/minreadtest.vcf --truth t/minreadtruth.vcf --prefix t/benchmark.minreadfrac --minreadfrac 0.5 --ref t/hs37d5_1start.fa --verbose > t/test7.out 2>&1");
+	    $out = `grep 'F1' t/benchmark.minreadfrac.report | awk '{print \$NF}'`;
+	    like $out, qr/0\.705/, "$script minreadfrac recall";
 	    #system("rm t/benchmark.distances");
 	    #system("rm t/test5.out");
 	}

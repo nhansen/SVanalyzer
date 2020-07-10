@@ -74,6 +74,8 @@ if ($include_bed) {
 
 my $max_distance = $Opt{'maxdist'};
 my $min_size = $Opt{'minsize'};
+my $min_readsupport = $Opt{'minreadsupport'};
+my $min_readfrac = $Opt{'minreadfrac'};
 my $normshift = $Opt{'normshift'};
 my $normsizediff = $Opt{'normsizediff'};
 my $normdist = $Opt{'normdist'};
@@ -116,7 +118,7 @@ WARN("Done");
 sub process_commandline {
     # Set defaults here
     %Opt = ( maxdist => 50000, prefix => 'benchmark', normshift => 0.2, normsizediff => 0.2, normdist => 0.2 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i minreadsupport=i minreadfrac=f prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -151,10 +153,6 @@ sub calculate_distance_matrix {
     my ($current_test_id, $current_truth_id) = (1, 1);
     while (my $rh_testsv = retrieve_next_sorted_sv($test_sortedvcf_fh, $ref_db)) {
   
-        if (!($rh_testsv->{id}) || ($rh_testsv->{id} eq '.') ) { # assign sequential
-            $rh_testsv->{id} = "testsv_".$current_test_id;
-            $current_test_id++;
-        } 
         my $test_chrom = $rh_testsv->{chrom} || ''; 
         my $test_pos = $rh_testsv->{pos} || ''; 
         my $test_end = $rh_testsv->{end} || ''; 
@@ -162,6 +160,11 @@ sub calculate_distance_matrix {
             INFO("Skipping $rh_testsv->{id} with chrom $test_chrom pos $test_pos end $test_end");
             next;
         }
+
+        if (!(defined($rh_testsv->{id})) || ($rh_testsv->{id} eq '.') ) { # assign sequential
+            $rh_testsv->{id} = "testsv_".$current_test_id;
+            $current_test_id++;
+        } 
         $total_test_svs++;
    
         # be sure @current_neighborhood_true_svs contains only nearby true SVs by deleting if necessary: 
@@ -182,14 +185,14 @@ sub calculate_distance_matrix {
             INFO("Adding to true variants in window for test variant $rh_testsv->{id}");
             my $rh_nexttruesv = retrieve_next_sorted_sv($true_sortedvcf_fh, $ref_db);
             last if (!$rh_nexttruesv);
-            if (!($rh_nexttruesv->{id}) || ($rh_nexttruesv->{id} eq '.') ) { # assign sequential
-                $rh_nexttruesv->{id} = "truesv_".$current_truth_id;
-                $current_truth_id++;
-            } 
             my $truth_chrom = $rh_nexttruesv->{chrom}; 
             my $truth_pos = $rh_nexttruesv->{pos}; 
             my $truth_end = $rh_nexttruesv->{end}; 
             next if ((!($truth_chrom)) || (!($truth_pos)) || (!($truth_end)));
+            if (!(defined($rh_nexttruesv->{id})) || ($rh_nexttruesv->{id} eq '.') ) { # assign sequential
+                $rh_nexttruesv->{id} = "truesv_".$current_truth_id;
+                $current_truth_id++;
+            } 
             $total_true_svs++;
 
             push @current_neighborhood_true_svs, $rh_nexttruesv;
@@ -296,7 +299,7 @@ sub retrieve_next_sorted_sv {
     }
     chomp $next_line;
     if ($next_line =~ /^(\S+)\t(\d+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)/) {
-        my ($chrom, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
+        my ($chrom, $start, $id, $ref, $alt, $info, $format, $genotype) = ($1, $2, $3, $4, $5, $8, $9, $10);
         $ref = uc($ref);
         $alt = uc($alt);
  
@@ -327,7 +330,8 @@ sub retrieve_next_sorted_sv {
         return {'chrom' => $chrom, 'pos' => $start, 'start' => $start, 
                 'end' => $end, 'id' => $id, 'ref' => $ref,
                 'alt' => $alt, 'reflength' => $reflength, 
-                'altlength' => $altlength};
+                'altlength' => $altlength, 'format' => $format,
+                'genotype' => $genotype, 'vcf_line' => "$next_line\n"};
     }
     else {
         die "Unexpected VCF line:\n$next_line";
@@ -360,19 +364,31 @@ sub write_fp_fn_variants {
 
     my ($current_test_id, $current_truth_id) = (1, 1);
     my $duplicates_warned = 1;
-    while (<$test_vcf_fh>) {
-        if (/^#/) { # header line--print to fp file:
-            print $fp_fh $_;
+    #while (<$test_vcf_fh>) {
+    while (my $rh_testsv = retrieve_next_sorted_sv($test_vcf_fh, $ref_db)) {
+        my $next_vcf_line = $rh_testsv->{vcf_line};
+        next if (!$next_vcf_line);
+        if ($next_vcf_line =~ /^#/) { # header line--print to fp file:
+            print $fp_fh $next_vcf_line;
         }
         else {
-            my $vcf_line = $_;
-            chomp;
-            my @fields = split /\t/, $_;
+            chomp $next_vcf_line;
+            my @fields = split /\t/, $next_vcf_line;
             my $test_id = $fields[2];
             if ($test_id eq '.') {
                 $test_id = "testsv_".$current_test_id;
                 $current_test_id++;
             }
+
+            # skip test variants with insufficient read support or read fraction if specified in the options:
+            if ($min_readsupport || $min_readfrac) {
+                my ($var_reads, $ref_reads) = retrieve_read_counts(@fields);
+                next if (!(defined($var_reads)));
+                next if ($min_readsupport && $var_reads < $min_readsupport);
+                next if (!(defined($ref_reads)));
+                next if ($min_readfrac && $ref_reads && $var_reads && $var_reads < $min_readfrac * $ref_reads);
+            }
+
             my $testsize = retrieve_variant_size(@fields);
             if (!($min_size) || ($testsize > $min_size) ) { # Tested prediction
                 my @matched_ids = ($rh_distances->{$test_id}) ?
@@ -390,7 +406,7 @@ sub write_fp_fn_variants {
     
                 my $no_tps = @true_positives;
                 if (!($no_tps)) { # no match--FP!
-                    print $fp_fh $vcf_line;
+                    print $fp_fh "$next_vcf_line\n";
                     $no_falsepositives++;
                 }
                 elsif ($no_tps > 1) { # potential duplicates
@@ -415,14 +431,16 @@ sub write_fp_fn_variants {
 
     my $truth_vcf_fh = Open("$truth_command");
     $duplicates_warned = 0;
-    while (<$truth_vcf_fh>) {
-        if (/^#/) { # header line--print to fn file:
-            print $fn_fh $_;
+    #while (<$truth_vcf_fh>) {
+    while (my $rh_truesv = retrieve_next_sorted_sv($truth_vcf_fh, $ref_db)) {
+        my $next_vcf_line = $rh_truesv->{vcf_line};
+        next if (!$next_vcf_line);
+        if ($next_vcf_line =~ /^#/) { # header line--print to fn file:
+            print $fn_fh "$next_vcf_line";
         }
         else {
-            my $vcf_line = $_;
-            chomp;
-            my @fields = split /\t/, $_;
+            chomp $next_vcf_line;
+            my @fields = split /\t/, $next_vcf_line;
             my $truth_id = $fields[2];
             if ($truth_id eq '.') {
                 $truth_id = "truesv_".$current_truth_id;
@@ -437,7 +455,7 @@ sub write_fp_fn_variants {
                 my $no_test_matches = @test_matches;
     
                 if (!($no_test_matches)) { # missed--FN!
-                    print $fn_fh $vcf_line;
+                    print $fn_fh "$next_vcf_line\n";
                     $no_falsenegatives++;
                 }
                 elsif ($no_test_matches > 1) {
@@ -496,6 +514,29 @@ sub retrieve_variant_size {
 
 }
 
+sub retrieve_read_counts {
+    my @vcf_fields = @_;
+
+    my ($variant_reads, $reference_reads);
+
+    if ($vcf_fields[8] && $vcf_fields[9]) {
+        my @format_fields = split /:/, $vcf_fields[8];
+        my %field_indices = map { $format_fields[$_] => $_ } (0 .. $#format_fields);
+        my $ref_read_index = $field_indices{'DR'};
+        my $var_read_index = $field_indices{'DV'};
+        my @genotype_values = split /:/, $vcf_fields[9];
+        if (defined($ref_read_index)) {
+            $reference_reads = $genotype_values[$ref_read_index];
+        }
+        if (defined($var_read_index)) {
+            $variant_reads = $genotype_values[$var_read_index];
+        }
+    }
+
+    return ($variant_reads, $reference_reads);
+}
+
+
 __END__
 
 =head1 OPTIONS
@@ -527,6 +568,20 @@ Minimum size of a variant to be included in a benchmarking comparison. In
 calculations of recall/sensitivity, this minimum is applied to the size of the
 "true" variant. In calculations of precision, this minimum is applied to the
 size of the test variant.
+
+=item B<--minreadsupport <minimum number of variant reads>>
+
+Required minimum number of variant reads reported in a test variant's first
+genotype "DV" FORMAT field for that test variant to be included in the benchmark
+comparison. This FORMAT field is typically included by Fritz Sedlazeck's Sniffles 
+caller.
+
+=item B<--minreadfrac <minimum fraction of variant reads (out of total)>>
+
+Required minimum fraction of variant reads reported in a test variant's first
+genotype "DV" and "DR" FORMAT fields for a test variant to be included in the benchmark
+comparison. The fraction is the number of variant reads divided by the total of reference
+and variant reads.
 
 =item B<--prefix <prefix>>
 
