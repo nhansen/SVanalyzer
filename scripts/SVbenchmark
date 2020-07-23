@@ -159,7 +159,6 @@ sub calculate_distance_matrix {
         my $test_pos = $rh_testsv->{pos} || ''; 
         my $test_end = $rh_testsv->{end} || ''; 
         if ((!($test_chrom)) || (!($test_pos)) || (!($test_end))) {
-            INFO("Skipping $rh_testsv->{id} with chrom $test_chrom pos $test_pos end $test_end");
             next;
         }
 
