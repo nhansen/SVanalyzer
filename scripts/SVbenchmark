@@ -138,8 +138,10 @@ sub calculate_distance_matrix {
 
     my $test_command = construct_variant_command($test_vcf, $bedfile, $test_filter);
     my $test_sortedvcf_fh = Open("$test_command");
+    INFO("Test command: $test_command");
 
     my $truth_command = construct_variant_command($truth_vcf, $bedfile, $truth_filter);
+    INFO("Truth command: $truth_command");
     my $true_sortedvcf_fh = Open("$truth_command");
 
     my $rh_current_last_sv; # to check for sorting
@@ -241,6 +243,15 @@ sub calculate_distance_matrix {
         }
     }
 
+    WARN("Compared $total_test_svs test SVs to $total_true_svs truth set SVs");
+
+    if (!$total_test_svs) {
+        WARN("You are testing 0 test SVs. Perhaps you are using an inappropriate test filter or have a VCF file with unusual formatting.");
+    }
+    if (!$total_true_svs) {
+        WARN("You are testing 0 truth set SVs. Perhaps you are using an inappropriate truth set filter or have a VCF file with unusual formatting.");
+    }
+
     close $test_sortedvcf_fh;
     close $true_sortedvcf_fh;
     close $distance_fh;
@@ -312,7 +323,7 @@ sub retrieve_next_sorted_sv {
             $end = $start + $reflength - 1;
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
-            WARN("Skipping type BND or UNK: $next_line");
+            INFO("Skipping type BND or UNK: $next_line");
             return {};
         }
         elsif (($alt eq '<DEL>') && ($info =~ /;END=(\d+);{0,1}/ || $info =~ /^END=(\d+);{0,1}/)) { # use end tag
@@ -320,7 +331,15 @@ sub retrieve_next_sorted_sv {
             my $smo = $start - 1;
             $ref = uc($ref_db->seq("$chrom:$smo-$end"));
             $alt = substr($ref, 0, 1); # first character of reference
+            $reflength = $end - $smo + 1;
+            $altlength = 1;
             INFO("Calculating sequence for deletion $id");
+        }
+        elsif (($alt eq '<INS>') && ($info =~ /;SEQ=([atgcnATGCN]+);{0,1}/ || $info =~ /^SEQ=([atgcnATGCN]+);{0,1}/)) { # use end tag
+            $alt = uc($1); # first character of reference
+            $end = $start + length($ref) - 1;
+            $altlength = length($alt);
+            INFO("Using sequence from SEQ tag for insertion $id");
         }
         else { # don't know how to handle this
             INFO("Skipping non-ATGC ref or alt record: $next_line");
