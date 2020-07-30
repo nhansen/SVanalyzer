@@ -15,7 +15,7 @@ my $has_edlib = `which edlib-aligner 2>/dev/null`;
 my $has_nucmer = `which nucmer 2>/dev/null`;
 my $has_delta_filter = `which delta-filter 2>/dev/null`;
 
-plan tests => 16;
+plan tests => 17;
 
 my $out;
 # Test SVrefine: (2 tests--requires samtools)
@@ -67,6 +67,9 @@ SKIP: {
     like $out, qr/ExactMatchIDs=5/, "$script fofoptionworks";
     $out = `awk -F"\t" '\$4=="<INS>" {print}' t/mergedfof.clustered.vcf`;
     ok($out == "", "$script seqspecificoption");
+    system("perl -w -I blib/lib $script --variants t/mergens.vcf --prefix t/mergednsvcf --ref t/hs37d5_1start.fa > t/test3b.out 2>&1");
+    $out = `awk '\$3=="HG2_SnifflesTelo" {print \$8}' t/mergednsvcf.clustered.vcf`;
+    like $out, qr/NumClusterSVs=1/, "$script telomereskip";
     #system("rm t/merged.vcf");
     #system("rm t/merged.distances");
     #system("rm t/test3.out");

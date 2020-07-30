@@ -92,6 +92,55 @@ sub new {
 
 ###########################################################
 
+=item B<max_affected_region_length()>
+
+  This method 
+  
+  Input:  NHGRI::SVanalyzer::Comp object
+          
+  Output: Largest of the three widened haplotypes, reference
+          and two alternates.
+
+=cut
+
+###########################################################
+sub max_affected_region_length {
+    my $self  = shift;
+    my %params = @_;
+
+    my $rh_sv1 = $self->{sv1_info};
+    my $rh_sv2 = $self->{sv2_info};
+
+    my $reflength1 = $rh_sv1->{reflength};
+    my $reflength2 = $rh_sv2->{reflength};
+    my $altlength1 = $rh_sv1->{altlength};
+    my $altlength2 = $rh_sv2->{altlength};
+
+    my $chrom1 = $rh_sv1->{chrom};
+    my $chrom2 = $rh_sv2->{chrom};
+    my $pos1 = $rh_sv1->{pos};
+    my $pos2 = $rh_sv2->{pos};
+    my $end1 = $rh_sv1->{end};
+    my $end2 = $rh_sv2->{end};
+    my $left_bound = ($pos1 < $pos2) ? $pos1 : $pos2;
+    my $right_bound = ($end1 < $end2) ? $end2 : $end1;
+
+    if ($chrom1 ne $chrom2) {
+        return 0;
+    }
+    else {
+        my $widenedreflength = $right_bound - $left_bound + 1; 
+        my $widenedalt1length = $widenedreflength + $altlength1 - $reflength1;
+        my $widenedalt2length = $widenedreflength + $altlength2 - $reflength2;
+        my @alllengths = ($widenedreflength, $widenedalt1length, $widenedalt2length);
+        my @sortedalllengths = sort {$b <=> $a} @alllengths;
+        return $sortedalllengths[0];
+    }
+
+} ## end max_affected_region_length
+
+###########################################################
+
 =item B<potential_match()>
 
   This method 
@@ -196,7 +245,7 @@ sub calc_distance {
     my $rs_alt_hap2 = $self->construct_alt_hap(-left_bound => $left_bound, -right_bound => $right_bound, -svhashref => $rh_sv2);
 
     if (($rs_alt_hap1 == -1) || ($rs_alt_hap2 == -1)) {
-        print STDERR "$chrom:$right_bound is past end of chromosome--skipping comparison of $id1 and $id2\n";
+        print STDERR "$chrom:$left_bound-$right_bound is past end of chromosome--skipping comparison of $id1 and $id2\n";
         return {};
     }
     
@@ -288,7 +337,7 @@ sub construct_alt_hap {
         die "Chromosome $chrom has no length in fasta database!\n";
     }
 
-    if ($right_bound > $chrom_length) {
+    if (($left_bound < 1) || ($right_bound > $chrom_length)) {
         return -1;
     }
 

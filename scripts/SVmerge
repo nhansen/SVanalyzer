@@ -281,6 +281,7 @@ sub calc_distances {
                 if (($rh_neighborhood_sv->{chrom} eq $rh_sv->{chrom}) && (abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos}) <= $max_distance) &&
                      $comp_obj->potential_match( -relsizediff => $max_relsizediff, -relshift => $max_relshift)) {
                     my $rh_distance_metrics = $comp_obj->calc_distance();
+                    next if (!(defined($rh_distance_metrics->{'edit_distance'})));
                     my $edit_dist = $rh_distance_metrics->{'edit_distance'};
                     my $max_shift = $rh_distance_metrics->{'max_shift'};
                     my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
