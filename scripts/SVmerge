@@ -438,7 +438,7 @@ sub write_cluster_vcf {
             elsif (!($rh_clustered_variants->{$id_field})) { # singleton--print unless --seqspecific option is specified and variant has been skipped for clustering
                 DEBUG("ID $id_field is a singleton--will print VCF record unless it was not initially considered due to --seqspecific");
                 if ((defined($rh_node_index->{$id_field})) || !$Opt{seqspecific}) {
-                    write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NA', 'NA', 'NA']}, $ra_allowed_info_fields); 
+                    write_vcf_line_with_info($newvcf_fh, \@fields, {'nodestring' => $id_field, 'exactstring' => $id_field, 'maxdists' => ['NaN', 'NaN', 'NaN']}, $ra_allowed_info_fields); 
                     DEBUG("Wrote ID $id_field to VCF file");
                 }
             }
