@@ -187,7 +187,7 @@ sub _parse_delta_file {
                     last;
                 }
             }
-            print STDERR "Parsing entry pair $ref_entry/$query_entry\n";
+            print STDERR "Parsing entry pair $ref_entry/$query_entry\n" if ($self->{verbose});
             push @{$self->{entry_pairs}}, 
                  {ref_entry => $ref_entry, query_entry => $query_entry, ref_length => $ref_length, query_length => $query_length};
         }
@@ -195,6 +195,7 @@ sub _parse_delta_file {
             my ($ref_start, $ref_end, $query_start, $query_end, $mismatches, $nonposmatches, $nonalphas) = 
                 ($1, $2, $3, $4, $5, $6, $7);
             my $cigar_string = $self->_read_cigar_string($ref_start, $ref_end, $query_start, $query_end);
+            print STDERR "Read cigar string $cigar_string\n" if ($self->{verbose});
             if ($self->{extend_exact}) {
                 my ($new_ref_start, $new_ref_end, $new_query_start, $new_query_end, $new_cigar) = 
                     $self->_extend_exact($ref_entry, $ref_start, $ref_end, $query_entry, $query_start, $query_end, $cigar_string);
@@ -384,7 +385,7 @@ sub _extend_exact {
         $query_next_base =~ tr/ATGC/TACG/ if ($comp);
     
         my $right_extend_bases = ($new_cigar =~ s/(\d+)M$//) ? $1 : 0;
-        while ($ref_next_base eq $query_next_base) {
+        while ($ref_next_base ne 'N' && $ref_next_base eq $query_next_base) {
             $new_ref_end = $ref_next_pos;
             $new_query_end = $query_next_pos;
             $right_extend_bases++;
@@ -399,9 +400,11 @@ sub _extend_exact {
             $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
                                uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
+
+            print STDERR "Comparing $ref_next_base to $query_next_base\n" if ($self->{verbose});
         }
         $new_cigar = $new_cigar.$right_extend_bases.'M' if ($right_extend_bases);
-        #print STDERR "Rightside REF $ref_next_base does not match QUERY $query_next_base\n";
+        print STDERR "Rightside REF $ref_next_base does not match QUERY $query_next_base\n" if ($self->{verbose});
     }
 
     # extend to left:
@@ -416,7 +419,7 @@ sub _extend_exact {
         $query_next_base =~ tr/ATGC/TACG/ if ($comp);
     
         my $left_extend_bases = ($new_cigar =~ s/^(\d+)M//) ? $1 : 0;
-        while ($ref_next_base eq $query_next_base) {
+        while ($ref_next_base ne 'N' && $ref_next_base eq $query_next_base) {
             $new_ref_start = $ref_next_pos;
             $new_query_start = $query_next_pos;
             $left_extend_bases++;
@@ -431,17 +434,18 @@ sub _extend_exact {
             $query_next_base = ($rh_queryseqs) ? uc(substr($rh_queryseqs->{$query_entry}, $query_next_pos - 1, 1)) :
                              uc($query_fasta_db->seq("$query_entry:$query_next_pos-$query_next_pos"));
             $query_next_base =~ tr/ATGC/TACG/ if ($comp);
+            print STDERR "Comparing $ref_next_base to $query_next_base\n" if ($self->{verbose});
         }
         $new_cigar = $left_extend_bases.'M'.$new_cigar if ($left_extend_bases);
-        #print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n";
+        print STDERR "Leftside REF $ref_next_base does not match QUERY $query_next_base\n" if ($self->{verbose});
     }
 
     if ($self->{verbose} && ($new_cigar ne $cigar || $new_ref_start != $ref_start || $new_ref_end != $ref_end)) {
-        #print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
-        #print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
+        print STDERR "Ref $ref_entry:$ref_start-$ref_end extended to $new_ref_start-$new_ref_end\n";
+        print STDERR "Query $query_entry:$query_start-$query_end extended to $new_query_start-$new_query_end\n";
     }
-    else {
-        #print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";
+    elsif ($self->{verbose}) {
+        print STDERR "No extension! Ref $ref_entry:$ref_start-$ref_end (length $ref_length) Query $query_entry:$query_start-$query_end $cigar (length $query_length)\n";
     }
 
     return ($new_ref_start, $new_ref_end, $new_query_start, $new_query_end, $new_cigar);

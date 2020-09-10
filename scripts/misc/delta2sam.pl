@@ -123,12 +123,12 @@ sub write_edgelets {
                 my $query_start = $rh_align->{query_start};
                 my $query_end = $rh_align->{query_end};
                 my $comp = ($query_start > $query_end) ? 1 : 0;
+                # query_remaining is always the number of query bases to the 3' of the alignment
                 my $query_remaining = ($comp) ? $query_length - $query_start : $query_length - $query_end;
                 push @ref_aligns, [$query_entry, $rh_align->{ref_start}, $rh_align->{cigar_string}, $query_start, $query_end, $query_remaining];
 
                 if ($Opt{'alignlengths'}) {
                     my $cigar = $rh_align->{'cigar_string'};
-                    print "CIGAR $cigar\n";
                     my $longest_match = 0;
                     my $longest_del = 0;
                     my $longest_ins = 0;
@@ -161,17 +161,18 @@ sub write_edgelets {
             }
         }
 
-        my @sorted_ref_aligns = sort {$a->[1] <=> $b->[1]} @ref_aligns;
+        my @sorted_ref_aligns = sort {$a->[1] <=> $b->[1]} @ref_aligns; # sort by reference start
         foreach my $ra_ref_align (@sorted_ref_aligns) {
             my ($query_entry, $ref_start, $cigar, $query_start, $query_end, $query_remaining) = @{$ra_ref_align};
             my $flag = ($query_start > $query_end) ? 16 : 0;
             my $comp = ($query_start > $query_end) ? 1 : 0;
-            if ((!$comp && $query_start > 1) || ($comp && $query_end > 1)) { # hard clip start
-                my $query_hc = ($comp) ? $query_end - 1 : $query_start - 1;
+            if ((!$comp && $query_start > 1) || ($comp && $query_remaining > 0)) { # hard clip start
+                my $query_hc = ($comp) ? $query_remaining : $query_start - 1;
                 $cigar = $query_hc."H".$cigar;
             }
-            if ($query_remaining > 0) { # hard clip end
-                $cigar = $cigar.$query_remaining."H";
+            if ((!$comp && $query_remaining > 0) || ($comp && $query_end > 1)) { # hard clip end
+                my $query_hc = ($comp) ? $query_end - 1 : $query_remaining;
+                $cigar = $cigar.$query_hc."H";
             }
             my $seq = $query_db->seq($query_entry, $query_start, $query_end);
             print $sam_fh "$query_entry\t$flag\t$ref_entry\t$ref_start\t0\t$cigar\t*\t*\t*\t$seq\t*\n";
