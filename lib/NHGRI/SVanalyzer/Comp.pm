@@ -190,6 +190,50 @@ sub potential_match {
 
 ###########################################################
 
+=item B<prohibitive_shift()>
+
+  This method checks to see if the difference in alternate
+      haplotype lengths is too large for the comparison
+      to yield a rel_indel_dist less than the maximum
+  
+  Input:  -max_indel_rate - maximum allowable relative
+              difference in alt haplotype lengths (as
+              compared to the "maximum affected region",
+              or MAR)
+          
+  Output: 1 if the shift between the two SVs is too large
+          0 otherwise
+
+=cut
+
+###########################################################
+sub prohibitive_shift {
+    my $self  = shift;
+    my %params = @_;
+
+    my $max_indel_rate = (defined($params{'-max_indel_rate'})) ? $params{'-max_indel_rate'} : 1.0;
+
+    my $mar_length = $self->max_affected_region_length();
+
+    my $rh_sv1 = $self->{sv1_info};
+    my $rh_sv2 = $self->{sv2_info};
+
+    my $altlength1 = $rh_sv1->{altlength};
+    my $altlength2 = $rh_sv2->{altlength};
+
+    my $althaplengthdiff = abs($altlength1 - $altlength2);
+
+    if ($althaplengthdiff > $max_indel_rate * $mar_length) {
+        return 0;
+    }
+    else {
+        return 1;
+    }
+
+} # end prohibitive_shift
+
+###########################################################
+
 =item B<calc_distance()>
 
   This method takes two hashes of structural variant info 
@@ -200,6 +244,10 @@ sub potential_match {
   Input:  If the second and third arguments are the key
           '-nocleanup' and a true value, will leave comparison
           fasta files and alignment output in place.
+          '-printdist' => file handle opened for writing
+          will cause a line detailing distance parameters
+          to be written.
+          
   Output: Reference to a hash containing distance metrics.
 
 =cut
@@ -208,6 +256,8 @@ sub potential_match {
 sub calc_distance {
     my $self  = shift;
     my %params = @_;
+
+    my $printdist_fh = $params{'-printdist'};
 
     my $rh_sv1 = $self->{sv1_info};
     my $rh_sv2 = $self->{sv2_info};
@@ -219,6 +269,7 @@ sub calc_distance {
     my $chrom = $rh_sv1->{chrom};
     my $pos1 = $rh_sv1->{pos};
     my $pos2 = $rh_sv2->{pos};
+    my $pos_diff = abs($pos2 - $pos1);
     my $end1 = $rh_sv1->{end};
     my $end2 = $rh_sv2->{end};
     my $id1 = $rh_sv1->{id};
@@ -236,6 +287,7 @@ sub calc_distance {
     my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
     my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
     my $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
+    my $max_region = $self->max_affected_region_length();
 
     # boundaries of constructed haplotype:
 
@@ -253,49 +305,163 @@ sub calc_distance {
     my $althaplength_avg = (length(${$rs_alt_hap1}) + length(${$rs_alt_hap2}))/2.0;
     my $althaplength_diff = length(${$rs_alt_hap1}) - length(${$rs_alt_hap2});
 
+    my %dist_hash = ();
     if (${$rs_alt_hap1} eq ${$rs_alt_hap2}) { # identical variants
         my $matchtype = 'EXACTMATCH';
-        return {'edit_distance' => 0,
-                'max_shift' => 0,
-                'match_type' => $matchtype,
-                'altlength_diff' => $althaplength_diff,
-                'altlength_avg' => $althaplength_avg,
-                'minhaplength' => $minhaplength,
-                'size_diff' => $size2 - $size1,
-                'size_avg' => ( $size1 + $size2 )/2.0,
-                'shared_denominator' => $shared_denominator};
+        %dist_hash = ('id1' => $id1,
+                      'id2' => $id2,
+                      'pos_diff' => $pos_diff,
+                      'edit_distance' => 0,
+                      'max_shift' => 0,
+                      'match_type' => $matchtype,
+                      'altlength_diff' => $althaplength_diff,
+                      'altlength_avg' => $althaplength_avg,
+                      'minhaplength' => $minhaplength,
+                      'size_diff' => $size2 - $size1,
+                      'size_avg' => ( $size1 + $size2 )/2.0,
+                      'shared_denominator' => $shared_denominator,
+                      'd_s' => 0,
+                      'd_i' => 0,
+                      'max_affected_region_length' => $max_region);
     }
     else {
         # align the alternative haplotypes to each other and evaluate
-        my ($maxshift, $editdistance) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2, '-nocleanup',  $params{'-nocleanup'});
-        #if (($editdistance/$minhaplength < 0.05) && (abs($maxshift) < $minsvsize)) {
+        my ($maxshift, $editdistance, $m_ops, $di_ops) = $self->compare_alt_haplotypes($rs_alt_hap1, $rs_alt_hap2, $id1, $id2, '-nocleanup',  $params{'-nocleanup'});
         if (abs($maxshift) < $minsvsize) {
             my $matchtype = 'NWMATCH';
-            return {'edit_distance' => $editdistance,
-                    'max_shift' => $maxshift,
-                    'match_type' => $matchtype,
-                    'altlength_diff' => $althaplength_diff,
-                    'altlength_avg' => $althaplength_avg,
-                    'minhaplength' => $minhaplength,
-                    'size_diff' => $size2 - $size1,
-                    'size_avg' => ( $size1 + $size2 )/2.0,
-                    'shared_denominator' => $shared_denominator};
+            %dist_hash = ('id1' => $id1,
+                          'id2' => $id2,
+                          'pos_diff' => $pos_diff,
+                          'edit_distance' => $editdistance,
+                          'max_shift' => $maxshift,
+                          'match_type' => $matchtype,
+                          'altlength_diff' => $althaplength_diff,
+                          'altlength_avg' => $althaplength_avg,
+                          'minhaplength' => $minhaplength,
+                          'size_diff' => $size2 - $size1,
+                          'size_avg' => ( $size1 + $size2 )/2.0,
+                          'shared_denominator' => $shared_denominator,
+                          'd_s' => $m_ops,
+                          'd_i' => $di_ops,
+                          'max_affected_region_length' => $max_region);
         }
         else {
             my $matchtype = 'NWFAIL';
-            return {'edit_distance' => $editdistance,
-                    'max_shift' => $maxshift,
-                    'match_type' => $matchtype,
-                    'altlength_diff' => $althaplength_diff,
-                    'altlength_avg' => $althaplength_avg,
-                    'minhaplength' => $minhaplength,
-                    'size_diff' => $size2 - $size1,
-                    'size_avg' => ( $size1 + $size2 )/2.0,
-                    'shared_denominator' => $shared_denominator};
+            %dist_hash = ('id1' => $id1,
+                          'id2' => $id2,
+                          'pos_diff' => $pos_diff,
+                          'edit_distance' => $editdistance,
+                          'max_shift' => $maxshift,
+                          'match_type' => $matchtype,
+                          'altlength_diff' => $althaplength_diff,
+                          'altlength_avg' => $althaplength_avg,
+                          'minhaplength' => $minhaplength,
+                          'size_diff' => $size2 - $size1,
+                          'size_avg' => ( $size1 + $size2 )/2.0,
+                          'shared_denominator' => $shared_denominator,
+                          'd_s' => $m_ops,
+                          'd_i' => $di_ops,
+                          'max_affected_region_length' => $max_region);
         }
     }
 
+    if ($printdist_fh) {
+        $self->print_distance_metrics($printdist_fh, {%dist_hash});
+    }
+
+    return {%dist_hash};
+
 } ## end calc_distance
+
+###########################################################
+
+=item B<print_distance_metrics()>
+
+  This method prints a line with detailed metrics about
+  the object's SV comparison
+
+  The following parameters should be passed to the method:
+  
+  Input:  NHGRI::SVanalyzer::Comp object
+          An open filehandle for writing
+          A reference to a hash of distance metrics
+
+  Returns: 1 if a line was printed, 0 otherwise
+
+=cut
+
+###########################################################
+
+sub print_distance_metrics {
+    my $self = shift;
+    my $fh = shift;
+    my $rh_distance_metrics = shift;
+
+    if (!(defined($rh_distance_metrics->{'edit_distance'}))) {
+        return 0;
+    }
+
+    my $id1 = $rh_distance_metrics->{'id1'};
+    my $id2 = $rh_distance_metrics->{'id2'};
+    my $pos_diff = $rh_distance_metrics->{'pos_diff'};
+    my $edit_dist = $rh_distance_metrics->{'edit_distance'};
+    my $max_shift = $rh_distance_metrics->{'max_shift'};
+    my $altlength_diff = $rh_distance_metrics->{'altlength_diff'};
+    my $altlength_avg = $rh_distance_metrics->{'altlength_avg'};
+    my $size_diff = $rh_distance_metrics->{'size_diff'};
+    my $size_avg = $rh_distance_metrics->{'size_avg'};
+    my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+    my $d_s = $rh_distance_metrics->{'d_s'};
+    my $d_i = $rh_distance_metrics->{'d_i'};
+    my $mar_length = $rh_distance_metrics->{'max_affected_region_length'};
+    my $rel_sub_dist = $d_s/$mar_length;
+    my $rel_indel_dist = $d_i/$mar_length;
+
+    # divide maximum shift by the minimum absolute size of the two variants:
+    my $d1 = abs($max_shift)/$shared_denominator;
+    # divide the size difference of the two indels by the average absolute size of the difference
+    my $d2 = abs($size_diff)/$shared_denominator;
+    # divide edit distance by the minimum alternate haplotype length:
+    my $d3 = abs($edit_dist)/$shared_denominator;
+    print $fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\t$d_s\t$d_i\t$mar_length\t$rel_sub_dist\t$rel_indel_dist\n";
+
+    return 1;
+
+} # end print_distance_metrics
+
+###########################################################
+
+=item B<read_distance_metrics()>
+
+  This class method parses a line of text in the format 
+  written by this class with detailed metrics about
+  the object's SV comparison
+
+  The following parameters should be passed to the method:
+  
+  Input:  A string containing tab-delimited distance metrics
+  Returns: A reference to a labeled hash
+
+=cut
+
+###########################################################
+
+sub read_distance_metrics {
+    my $distancestring = shift;
+
+    chomp $distancestring;
+    my ($disttag, $id1, $id2, $avgaltlength, $altlengthdiff, $avgsize, $sizediff, $editdist,
+        $maxshift, $posdiff, $relshift, $relsizediff, $reldist, $numsubs, $numindels, 
+        $marlength, $subsdist, $indeldist) = split /\t/, $distancestring;
+
+    return {'ID1' =>  $id1, 'ID2' => $id2, 'AVGALTLENGTH' => $avgaltlength,
+            'ALTLENGTHDIFF' => $altlengthdiff, 'AVGSIZE' => $avgsize, 'SIZEDIFF' => $sizediff,
+            'EDITDIST' => $editdist, 'MAXSHIFT' => $maxshift, 'POSDIFF' => $posdiff,
+            'RELSHIFT' => $relshift, 'RELSIZEDIFF' => $relsizediff, 'RELDIST' => $reldist,
+            'NUMSUBS' => $numsubs, 'NUMINDELS' => $numindels, 'MARLENGTH' => $marlength,
+            'SUBSDIST' => $subsdist, 'INDELDIST' => $indeldist};
+
+}
 
 ###########################################################
 
@@ -396,11 +562,15 @@ sub compare_alt_haplotypes {
     if ($nw_output =~ /Cigar:\n(.*)/m) {
         my $cigar_string = $1;
         my $score = ($nw_output =~ /score = (\d+)/)  ? $1 : 'NA';
-        my $maxshift = calc_max_shift($cigar_string);
-        return ($maxshift, $score);
+        my ($maxshift, $no_ms, $no_dis) = calc_max_shift($cigar_string, $rs_alt1, $rs_alt2);
+        return ($maxshift, $score, $no_ms, $no_dis);
     }
     else {
-        return ('NA', 'NA');
+        my $alt1length = length(${$rs_alt1});
+        my $alt2length = length(${$rs_alt2});
+        my $no_ms = ($alt1length < $alt2length) ? $alt1length : $alt2length;
+        my $no_dis = ($alt1length < $alt2length) ? $alt2length - $alt1length : $alt1length - $alt2length;
+        return ('NA', 'NA', $no_ms, $no_dis);
     }
 
 } ## end compare_alt_haplotypes
@@ -521,30 +691,62 @@ sub format_50 {
 ###########################################################
 sub calc_max_shift {
     my $cigar = shift;
+    my $rsseq1 = shift;
+    my $rsseq2 = shift;
 
-    my ($max_shift, $current_shift) = (0, 0);
+    my $cigarcopy = $cigar;
+    my $rev1 = reverse ($$rsseq1);
+    my $rev2 = reverse ($$rsseq2);
+    my ($max_shift, $current_shift, $no_ms, $no_dis) = (0, 0);
+    my ($nextbase1, $nextbase2);
     #print "Cigar: $cigar\n";
-    while ($cigar) {
+    while ($cigarcopy) {
         my ($bases, $op);
-        if ($cigar =~ s/^(\d+)([MDI])//) {
+        if ($cigarcopy =~ s/^(\d+)([MDI])//) {
             ($bases, $op) = ($1, $2);
             if ($op eq 'D') { # deleted from reference, decrease shift
+                for (my $i=1; $i<=$bases; $i++) {
+                    $nextbase2 = chop $rev2;
+                    if (!$nextbase2) {
+                       die "Incorrect cigar string $cigar for sequences $$rsseq1, $$rsseq2\n";
+                    }
+                }
                 $current_shift -= $bases;
+                $no_dis += $bases;
             }
             elsif ($op eq 'I') { # deleted from reference--advance ref coord
                 $current_shift += $bases;
+                $no_dis += $bases;
+                for (my $i=1; $i<=$bases; $i++) {
+                    $nextbase1 = chop $rev1;
+                    if (!$nextbase1) {
+                       die "Incorrect cigar string $cigar for sequences $$rsseq1, $$rsseq2\n";
+                    }
+                }
+            }
+            elsif ($op eq 'M') { # match
+                for (my $i=1; $i<=$bases; $i++) {
+                    $nextbase1 = chop $rev1;
+                    $nextbase2 = chop $rev2;
+                    if ((!$nextbase2) || (!$nextbase1)) {
+                       die "Incorrect cigar string $cigar for sequences $$rsseq1, $$rsseq2\n";
+                    }
+                    if ($nextbase1 ne $nextbase2) {
+                       $no_ms++;
+                    }
+                }
             }
             if (abs($current_shift) > abs($max_shift)) {
                 $max_shift = $current_shift;
             }
         }
         else {
-            die "Cigar string $cigar is of the wrong form!\n";
+            die "Cigar string $cigarcopy is of the wrong form!\n";
         }
     }
     #print "Max shift: $max_shift\n";
 
-    return $max_shift;
+    return ($max_shift, $no_ms, $no_dis);
 
 } ## end calc_max_shift
 

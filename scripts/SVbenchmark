@@ -118,7 +118,7 @@ WARN("Done");
 sub process_commandline {
     # Set defaults here
     %Opt = ( maxdist => 50000, prefix => 'benchmark', normshift => 0.2, normsizediff => 0.2, normdist => 0.2 );
-    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i minreadsupport=i minreadfrac=f prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
+    GetOptions(\%Opt, qw( ref=s test=s truth=s maxdist=i minsize=i minreadsupport=i minreadfrac=f prefix=s includebed=s distance_file=s testfilter=s truthfilter=s normshift=f normsizediff=f normdist=f newdist max_subs_rate=f max_indel_rate=f nocleanup manual help+ version verbose debug)) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVbenchmark.pl, ", q$Revision:$, "\n"; }
@@ -132,9 +132,9 @@ sub calculate_distance_matrix {
     my $bedfile = shift;
 
     my $distance_file = "$prefix.distances";
-    my $distance_fh = Open($distance_file, "w");
+    my $dist_fh = Open($distance_file, "w");
 
-    print $distance_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\n";
+    print $dist_fh "DIST\tID1\tID2\tAVGALTLENGTH\tALTLENGTHDIFF\tAVGSIZE\tSIZEDIFF\tEDITDIST\tMAXSHIFT\tPOSDIFF\tRELSHIFT\tRELSIZEDIFF\tRELDIST\tNOSUBS\tNOINDELS\tMAR\tSUBSDIST\tINDELDIST\n";
 
     my $test_command = construct_variant_command($test_vcf, $bedfile, $test_filter);
     my $test_sortedvcf_fh = Open("$test_command");
@@ -211,7 +211,7 @@ sub calculate_distance_matrix {
             if (($rh_truesv->{chrom} eq $rh_testsv->{chrom}) && 
                   (abs($rh_testsv->{pos} - $rh_truesv->{pos}) <= $max_distance) &&
                   ($comp_obj->potential_match())) {
-                my $rh_distance_metrics = $comp_obj->calc_distance('-nocleanup' => $Opt{'nocleanup'});
+                my $rh_distance_metrics = $comp_obj->calc_distance('-nocleanup' => $Opt{'nocleanup'}, '-printdist' => $dist_fh);
                 if (!(defined($rh_distance_metrics->{'edit_distance'}))) {
                     WARN("Skipping comparison of $rh_truesv->{id} and $rh_testsv->{id} due to invalid coordinates.");
                     next;
@@ -224,6 +224,12 @@ sub calculate_distance_matrix {
                 my $size_diff = $rh_distance_metrics->{'size_diff'};
                 my $size_avg = $rh_distance_metrics->{'size_avg'};
                 my $shared_denominator = $rh_distance_metrics->{'shared_denominator'};
+                my $nds = $rh_distance_metrics->{'d_s'};
+                my $ndi = $rh_distance_metrics->{'d_i'};
+                my $mar = $rh_distance_metrics->{'max_affected_region_length'};
+                my $ds = $nds/$mar;
+                my $di = $ndi/$mar;
+    
     
                 # divide maximum shift by the minimum absolute size of the two variants:
                 my $d1 = abs($max_shift)/$shared_denominator;
@@ -233,8 +239,7 @@ sub calculate_distance_matrix {
                 my $d3 = abs($edit_dist)/$shared_denominator;
                 my $id1 = $rh_testsv->{id};
                 my $id2 = $rh_truesv->{id};
-                print $distance_fh "DIST\t$id1\t$id2\t$altlength_avg\t$altlength_diff\t$size_avg\t$size_diff\t$edit_dist\t$max_shift\t$pos_diff\t$d1\t$d2\t$d3\n";
-                $distances{$id1}->{$id2} = [$pos_diff, $d1, $d2, $d3];
+                $distances{$id1}->{$id2} = ($Opt{'newdist'}) ? [$pos_diff, $ds, $di] : [$pos_diff, $d1, $d2, $d3];
             }
             else {
                 INFO("No potential match for $rh_testsv->{id} and $rh_truesv->{id}");
@@ -253,7 +258,7 @@ sub calculate_distance_matrix {
 
     close $test_sortedvcf_fh;
     close $true_sortedvcf_fh;
-    close $distance_fh;
+    close $dist_fh;
     
     return {%distances};
 
@@ -288,8 +293,8 @@ sub read_distance_file {
     while (<$dist_fh>) {
         if (/^DIST/) {
             chomp;
-            my ($dummy, $id1, $id2, $altlength_avg, $altlength_diff, $size_avg, $size_diff, $edit_dist, $max_shift, $pos_diff, $d1, $d2, $d3) = split /\t/, $_;
-            $distances{$id1}->{$id2} = [$pos_diff, $d1, $d2, $d3];
+            my ($dummy, $id1, $id2, $altlength_avg, $altlength_diff, $size_avg, $size_diff, $edit_dist, $max_shift, $pos_diff, $d1, $d2, $d3, $nds, $ndi, $mar, $ds, $di) = split /\t/, $_;
+            $distances{$id1}->{$id2} = ($Opt{'newdist'}) ? [$pos_diff, $ds, $di] : [$pos_diff, $d1, $d2, $d3];
         }
     }
 
@@ -382,7 +387,7 @@ sub write_fp_fn_variants {
 
     my ($current_test_id, $current_truth_id) = (1, 1);
     my $duplicates_warned = 1;
-    #while (<$test_vcf_fh>) {
+
     while (my $rh_testsv = retrieve_next_sorted_sv($test_vcf_fh, $ref_db)) {
         my $next_vcf_line = $rh_testsv->{vcf_line};
         next if (!$next_vcf_line);
@@ -414,11 +419,20 @@ sub write_fp_fn_variants {
                 my @true_positives = ();
                 foreach my $truth_id (@matched_ids) {
                     my @matchdistances = @{$rh_distances->{$test_id}->{$truth_id}};
-                    if ($matchdistances[1] <= $normshift &&
-                        $matchdistances[2] <= $normsizediff &&
-                        $matchdistances[3] <= $normdist) { # found a match--TP!
-                        push @true_positives, $truth_id;
-                        push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+                    if ($Opt{'newdist'}) {
+                        if ($matchdistances[1] <= $Opt{'max_subs_rate'} &&
+                            $matchdistances[2] <= $Opt{'max_indel_rate'}) { # found a match--TP!
+                            push @true_positives, $truth_id;
+                            push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+                        }
+                    }
+                    else {
+                        if ($matchdistances[1] <= $normshift &&
+                            $matchdistances[2] <= $normsizediff &&
+                            $matchdistances[3] <= $normdist) { # found a match--TP!
+                            push @true_positives, $truth_id;
+                            push @{$rh_truepositive_truth_ids->{$truth_id}}, $test_id;
+                        }
                     }
                 }
     
@@ -495,18 +509,18 @@ sub write_fp_fn_variants {
     print $output_fh "RECALL:\n";
     print $output_fh "Number of detected true variants (DTP): $no_detectedtruepositives\n";
     print $output_fh "Number of undetected true variants (FN): $no_falsenegatives\n";
-    my $recallval = ($no_detectedtruepositives + $no_falsenegatives) ? $no_detectedtruepositives/($no_detectedtruepositives+$no_falsenegatives) : 'NA';
-    my $recall = ($recallval eq 'NA' ) ? $recallval : sprintf("%5.2f", 100*$recallval);
+    my $recallval = ($no_detectedtruepositives + $no_falsenegatives) ? $no_detectedtruepositives/($no_detectedtruepositives+$no_falsenegatives) : 'NaN';
+    my $recall = ($recallval eq 'NaN' ) ? $recallval : sprintf("%5.2f", 100*$recallval);
     print $output_fh "Recall (DTP/(DTP+FN)): $recall\%\n";
     print $output_fh "\n";
     print $output_fh "PRECISION:\n";
     print $output_fh "Number of predictions that are true (PTP): $no_truepositives\n";
     print $output_fh "Number of false positives (FP): $no_falsepositives\n";
-    my $precisionval = ($no_truepositives+$no_falsepositives) ? $no_truepositives/($no_truepositives+$no_falsepositives) : 'NA';
-    my $precision = ($precisionval eq 'NA' ) ? $precisionval : sprintf("%5.2f", 100*$precisionval);
+    my $precisionval = ($no_truepositives+$no_falsepositives) ? $no_truepositives/($no_truepositives+$no_falsepositives) : 'NaN';
+    my $precision = ($precisionval eq 'NaN' ) ? $precisionval : sprintf("%5.2f", 100*$precisionval);
     print $output_fh "Precision (PTP/(PTP+FP)): $precision\%\n";
     print $output_fh "\n";
-    my $f1score = ($recallval ne 'NA' && $precisionval ne 'NA' && $recallval + $precisionval > 0) ? 2*$recallval*$precisionval/($recallval+$precisionval) : 'NA';
+    my $f1score = ($recallval ne 'NaN' && $precisionval ne 'NaN' && $recallval + $precisionval > 0) ? 2*$recallval*$precisionval/($recallval+$precisionval) : 'NaN';
     print $output_fh "F1 (2*Recall*Precision/(Recall+Precision): $f1score\n";
 }
 
