@@ -697,7 +697,7 @@ sub calc_max_shift {
     my $cigarcopy = $cigar;
     my $rev1 = reverse ($$rsseq1);
     my $rev2 = reverse ($$rsseq2);
-    my ($max_shift, $current_shift, $no_ms, $no_dis) = (0, 0);
+    my ($max_shift, $current_shift, $no_ms, $no_dis) = (0, 0, 0, 0);
     my ($nextbase1, $nextbase2);
     #print "Cigar: $cigar\n";
     while ($cigarcopy) {
