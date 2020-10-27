@@ -293,7 +293,8 @@ sub calc_distances {
                 my $pos_diff = abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos});
                 if (($rh_neighborhood_sv->{chrom} eq $rh_sv->{chrom}) && ($pos_diff <= $max_distance)) {
                     if ($Opt{'newdist'}) {
-                        if (!$comp_obj->prohibitive_shift( -max_indel_rate => $Opt{maxindelrate} )) {
+                        if (!($comp_obj->prohibitive_shift( -max_indel_rate => $Opt{maxindelrate} )) &&
+                                             ($comp_obj->potential_match('-shiftfactor' => 1.0))) {
                             my $rh_distance_metrics = $comp_obj->calc_distance( -printdist => $dist_fh );
                             next if (!(defined($rh_distance_metrics->{'edit_distance'})));
                             my $d_s = $rh_distance_metrics->{'d_s'};
@@ -630,15 +631,24 @@ sub write_vcf_line_with_info {
     }
     @info_entries = @allowed_info_entries;
 
-    my ($maxshiftdist, $maxsizediff, $maxeditdist) = @{$ra_maxdists};
-
     push @info_entries, "ClusterIDs=$clustersvcalls";
     push @info_entries, "NumClusterSVs=$no_clustersvcalls";
     push @info_entries, "ExactMatchIDs=$exactsvcalls";
     push @info_entries, "NumExactMatchSVs=$no_exactsvcalls";
-    push @info_entries, "ClusterMaxShiftDist=$maxshiftdist";
-    push @info_entries, "ClusterMaxSizeDiff=$maxsizediff";
-    push @info_entries, "ClusterMaxEditDist=$maxeditdist";
+   
+    if ($Opt{'newdist'}) {
+        my ($maxeditdist, $maxshiftdist) = @{$ra_maxdists};
+    
+        push @info_entries, "ClusterMaxSubsDist=$maxeditdist";
+        push @info_entries, "ClusterMaxIndelDist=$maxshiftdist";
+    }
+    else {
+        my ($maxshiftdist, $maxsizediff, $maxeditdist) = @{$ra_maxdists};
+    
+        push @info_entries, "ClusterMaxShiftDist=$maxshiftdist";
+        push @info_entries, "ClusterMaxSizeDiff=$maxsizediff";
+        push @info_entries, "ClusterMaxEditDist=$maxeditdist";
+    }
 
     $ra_vcf_fields->[7] = join ';', @info_entries;
     $ra_vcf_fields->[8] = '.'; # no format/genotype for now
@@ -656,9 +666,15 @@ sub print_info_lines {
     print $fh "##INFO=<ID=NumClusterSVs,Number=1,Type=Integer,Description=\"Total number of SVs in this cluster\">\n";
     print $fh "##INFO=<ID=ExactMatchIDs,Number=1,Type=String,Description=\"IDs of SVs that are exactly the same call as this SV\">\n";
     print $fh "##INFO=<ID=NumExactMatchSVs,Number=1,Type=Integer,Description=\"Total number of SVs in this exact cluster\">\n";
-    print $fh "##INFO=<ID=ClusterMaxShiftDist,Number=1,Type=Float,Description=\"Maximum relative shift distance between two SVs in this cluster\">\n";
-    print $fh "##INFO=<ID=ClusterMaxSizeDiff,Number=1,Type=Float,Description=\"Maximum relative size difference between two SVs in this cluster\">\n";
-    print $fh "##INFO=<ID=ClusterMaxEditDist,Number=1,Type=Float,Description=\"Maximum relative edit distance between two SVs in this cluster\">\n";
+    if ($Opt{'newdist'}) {
+        print $fh "##INFO=<ID=ClusterMaxSubsDist,Number=1,Type=Float,Description=\"Maximum relative substitution distance between two SVs in this cluster\">\n";
+        print $fh "##INFO=<ID=ClusterMaxIndelDist,Number=1,Type=Float,Description=\"Maximum relative insertion/deletion distance between two SVs in this cluster\">\n";
+    }
+    else {
+        print $fh "##INFO=<ID=ClusterMaxShiftDist,Number=1,Type=Float,Description=\"Maximum relative shift distance between two SVs in this cluster\">\n";
+        print $fh "##INFO=<ID=ClusterMaxSizeDiff,Number=1,Type=Float,Description=\"Maximum relative size difference between two SVs in this cluster\">\n";
+        print $fh "##INFO=<ID=ClusterMaxEditDist,Number=1,Type=Float,Description=\"Maximum relative edit distance between two SVs in this cluster\">\n";
+    }
 }
 
 sub check_sort {

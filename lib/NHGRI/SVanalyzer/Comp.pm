@@ -161,6 +161,8 @@ sub potential_match {
     my $relshift = (defined($params{'-relshift'})) ? $params{'-relshift'} : 1.0;
     my $relsizediff = (defined($params{'-relsizediff'})) ? $params{'-relsizediff'} : 1.0;
 
+    my $shared_denominator = $params{'-shiftfactor'};
+
     my $rh_sv1 = $self->{sv1_info};
     my $rh_sv2 = $self->{sv2_info};
 
@@ -174,9 +176,13 @@ sub potential_match {
 
     my $minsvsize = (abs($size1) < abs($size2)) ? abs($size1) : abs($size2);
 
-    my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
-    my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
-    my $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
+    if (!(defined($shared_denominator))) {
+
+        my $larger_allele1 = ($reflength1 > $altlength1) ? $reflength1 : $altlength1;
+        my $larger_allele2 = ($reflength2 > $altlength2) ? $reflength2 : $altlength2;
+    
+        $shared_denominator = ($larger_allele1 + $larger_allele2) / 2.0;
+    }
 
     if ((abs($size1 - $size2) > $shared_denominator * $relsizediff) ||
         (abs($size1 - $size2) > $shared_denominator * $relshift)) {
@@ -224,10 +230,10 @@ sub prohibitive_shift {
     my $althaplengthdiff = abs($altlength1 - $altlength2);
 
     if ($althaplengthdiff > $max_indel_rate * $mar_length) {
-        return 0;
+        return 1;
     }
     else {
-        return 1;
+        return 0;
     }
 
 } # end prohibitive_shift
