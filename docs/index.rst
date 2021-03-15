@@ -25,6 +25,11 @@ variant calls.
 Install
 ========
 
+Software dependencies
+---------------------
+
+SVanalyzer tools require samtools (http://www.htslib.org), the edlib aligner (https://github.com/Martinsos/edlib), MUMmer (https://github.com/mummer4/mummer), and bedtools (http://bedtools.readthedocs.io/en/latest/) to perform its structural variant comparisons.
+
 Using conda
 -------------------
 
