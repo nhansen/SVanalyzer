@@ -142,9 +142,11 @@ sub open_files_and_sort {
         my $this_command = ($vcf_file =~ /gz$/) ? "gunzip -c $vcf_file" : "cat $vcf_file";
         push @commands, $this_command;
     }
-    my $header_capture = ($vcf_files[0] =~ /gz$/) ? "gunzip -c $vcf_files[0] | grep \'#\'" : "grep \'#\' $vcf_files[0]";
+    my $header_capture = ($vcf_files[0] =~ /gz$/) ? "gunzip -c $vcf_files[0] | grep \'^#\'" : "grep \'^#\' $vcf_files[0]";
     my $commandpipe = join ';', @commands;
-    $commandpipe = "(" . $header_capture . "; (" . $commandpipe . ") | grep -v '#' | sort -k1,1 -k2,2n ) |";
+    $commandpipe = "(" . $header_capture . "; (" . $commandpipe . ") | grep -v '^#' | sort -k1,1 -k2,2n ) |";
+    #$commandpipe = "(" . $commandpipe . ") | grep -v '^#' | sort -k1,1 -k2,2n |";
+    DEBUG("Command pipe:\n$commandpipe");
     my $variant_fh = Open($commandpipe);
 
     return $variant_fh;
@@ -293,8 +295,9 @@ sub calc_distances {
                 my $pos_diff = abs($rh_neighborhood_sv->{pos} - $rh_sv->{pos});
                 if (($rh_neighborhood_sv->{chrom} eq $rh_sv->{chrom}) && ($pos_diff <= $max_distance)) {
                     if ($Opt{'newdist'}) {
-                        if (!($comp_obj->prohibitive_shift( -max_indel_rate => $Opt{maxindelrate} )) &&
-                                             ($comp_obj->potential_match('-shiftfactor' => 1.0))) {
+                        if (!($comp_obj->prohibitive_shift( -max_indel_rate => $Opt{maxindelrate} ))) {
+                        ##if (!($comp_obj->prohibitive_shift( -max_indel_rate => $Opt{maxindelrate} )) &&
+                                             #($comp_obj->potential_match('-shiftfactor' => 1.0))) { # second line disallows difference in size 
                             my $rh_distance_metrics = $comp_obj->calc_distance( -printdist => $dist_fh );
                             next if (!(defined($rh_distance_metrics->{'edit_distance'})));
                             my $d_s = $rh_distance_metrics->{'d_s'};
