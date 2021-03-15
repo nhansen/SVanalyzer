@@ -8,6 +8,10 @@ p. SVanalyzer was written by Nancy Fisher Hansen, a staff scientist in the Cance
 Genetics and Comparative Genomics Branch (CGCG) of NHGRI, an institute at the 
 National Institutes of Health.  Nancy can be reached at nhansen@mail.nih.gov.
 
+h2. Software dependencies
+
+SVanalyzer tools require samtools (http://www.htslib.org), the edlib aligner (https://github.com/Martinsos/edlib), MUMmer (https://github.com/mummer4/mummer), and bedtools (http://bedtools.readthedocs.io/en/latest/) to perform its structural variant comparisons.
+
 h2. Installing with conda
 
 SVanalyzer can be installed using the conda package manager with the bioconda channel.
