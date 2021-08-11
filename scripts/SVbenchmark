@@ -270,8 +270,8 @@ sub construct_variant_command {
     my $filterstring = shift;
 
     my $command = ($bedfile) ? "bedtools intersect -a $vcf_file -b $bedfile -u -wa | " :
-                        (($vcf_file =~ /\.gz$/) ? "gunzip -c $vcf_file | grep -v \'#\' | " :
-                        "grep -v \'#\' $vcf_file | ");
+                        (($vcf_file =~ /\.gz$/) ? "gunzip -c $vcf_file | grep -v \'^#\' | " :
+                        "grep -v \'^#\' $vcf_file | ");
 
     if ($filterstring) {
         $command .= "awk -F\"\\t\" \'\$7==\"" . $filterstring . "\" {print}\' | ";
