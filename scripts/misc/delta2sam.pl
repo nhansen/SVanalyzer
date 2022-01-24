@@ -175,7 +175,7 @@ sub write_edgelets {
                 $cigar = $cigar.$query_hc."H";
             }
             my $seq = $query_db->seq($query_entry, $query_start, $query_end);
-            print $sam_fh "$query_entry\t$flag\t$ref_entry\t$ref_start\t0\t$cigar\t*\t*\t*\t$seq\t*\n";
+            print $sam_fh "$query_entry\t$flag\t$ref_entry\t$ref_start\t0\t$cigar\t*\t0\t0\t$seq\t*\n";
         }
     }
 }
