@@ -84,6 +84,7 @@ while (<$invcf_fh>) {
     next if (/^#/);
 
     my $vcf_line = $_;
+    chomp $vcf_line;
     my ($chr, $pos, $end, $id, $ref, $alt) = parse_vcf_line($vcf_line);
 
     process_variant($chr, $pos, $end, $ref, $alt, $ref_db, $outvcf_fh, $vcf_line);
@@ -103,8 +104,8 @@ WARN("Done");
 
 sub process_commandline {
     # Set defaults here
-    %Opt = ( buffer => 10000, workdir => '.', prefix => 'widened' );
-    GetOptions(\%Opt, qw( variants=s ref=s prefix=s cleanup buffer=i noheader workdir=s manual help+ version verbose debug )) || pod2usage(0);
+    %Opt = ( buffer => 10000, workdir => '.', prefix => 'widened', maxlength => 100000, cleanup => 1 );
+    GetOptions(\%Opt, qw( variants=s ref=s prefix=s buffer=i cleanup! noheader workdir=s maxlength=i manual help+ version verbose debug )) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
     if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
     if ($Opt{version}) { die "SVwiden, ", q$Revision:$, "\n"; }
@@ -119,6 +120,11 @@ sub process_commandline {
         pod2usage(0);
     }
 
+    if (!(-d $Opt{workdir})) {
+        if (!mkdir $Opt{workdir}) {
+            FATAL("Couldn\'t create work directory $Opt{workdir}\n");
+        }
+    }
 }
 
 sub parse_vcf_line {
@@ -128,9 +134,10 @@ sub parse_vcf_line {
         my ($chr, $start, $id, $ref, $alt, $info) = ($1, $2, $3, $4, $5, $8);
         $ref = uc($ref);
         $alt = uc($alt);
+        $alt =~ s/\,.*//; # will only consider the first alternate allele when there are multiple
 
         my $end; # if we have sequence, end will be determined as last base of REF, otherwise, from END=
-        if (($ref =~ /^([ATGCN]+)$/) && ($alt =~ /^([ATGCN]+)$/)) {
+        if (($ref =~ /^([ATGCWYKRSMUBVDHN]+)$/) && ($alt =~ /^([ATGCWYKRSMUBVDHN]+)$/)) {
             $end = $start + length($ref) - 1;
         }
         else {
@@ -216,11 +223,16 @@ sub process_variant {
     my $alt_allele = $ref_allele;
     substr($alt_allele, $pos_within_ref_allele - 1, $end - $pos + 1, $alt);
 
+    if (length($ref_allele) > $Opt{'maxlength'} || length($alt_allele) > $Opt{'maxlength'}) {
+        INFO("Skipping variant at $chrom:$pos-$end due to allele length greater than $Opt{'maxlength'}.");
+        return {};
+    }
+
     my $workdir = $Opt{'workdir'};
     write_fasta_file("$workdir/ref.fasta", "ref", \$ref_allele);
     write_fasta_file("$workdir/alt.fasta", "alt", \$alt_allele);
 
-    my $delta_file = run_mummer($workdir, "$workdir/ref.fasta", "$workdir/alt.fasta", 'prefix');
+    my $delta_file = run_mummer($workdir, "$workdir/ref.fasta", "$workdir/alt.fasta", $prefix);
 
     my $rh_refseqs = {'ref' => $ref_allele};
     my $rh_queryseqs = {'alt' => $alt_allele};
@@ -328,7 +340,7 @@ sub process_variant {
             my $ref2 = $align2sv_obj->{ref2} + $left_end - 1;
             my $ref1p = ($align2sv_obj->{ref1p}) ? $align2sv_obj->{ref1p} + $left_end - 1 : undef;
             my $ref2p = ($align2sv_obj->{ref2p}) ? $align2sv_obj->{ref2p} + $left_end - 1 : undef;
-            $refwidened = ($svsize > 0) ? "$chrom:$ref2-$ref1" : "$chrom:$ref2p-$ref1p";
+            $refwidened = ($svsize > 0) ? (($ref1 && $ref2) ? "$chrom:$ref2-$ref1" : 'undefined') : (($ref1p && $ref2p) ? "$chrom:$ref2p-$ref1p" : 'undefined');
             my $no_center_aligns = @cross_center_aligns;
             DEBUG("BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $svsize REFWIDENED $refwidened NOCENTERALIGNS $no_center_aligns");
         }
@@ -364,6 +376,14 @@ sub process_variant {
                                             (($simlength >= -1*$orig_svsize) ? 'DUP' : 'SIMPLEINS');
             DEBUG("BREAKSIMLENGTH $simlength REPTYPE $reptype SIZE $orig_svsize REFWIDENED: $refwidened (SMALL)");
         }
+        unless (!$Opt{'cleanup'}) {
+            unlink "$workdir/ref.fasta";
+            unlink "$workdir/alt.fasta";
+            unlink $delta_file;
+            #unlink "$workdir/nucmer.$prefix.coords";
+            unlink "$workdir/nucmer.$prefix.out";
+            unlink "$workdir/run_mummer.$prefix.sh";
+        }
     }
     else {
         WARN("Unexpected alignments from MUMmer!");
@@ -376,7 +396,7 @@ sub process_variant {
     push @info_values, "REFWIDENED=$refwidened" if ($refwidened);
     $vcf_fields[7] = join ';', @info_values;
     $vcf_record = join "\t", @vcf_fields;
-    print $out_fh "$vcf_record";
+    print $out_fh "$vcf_record\n";
 }
 
 sub write_fasta_file {
@@ -432,15 +452,6 @@ sub run_mummer {
     my $cmd = "$mummer_cmd_file > $workingdir/nucmer.$nucmer_name.out 2> $workingdir/nucmer.$nucmer_name.err";
     system($cmd) == 0
         or FATAL("Something went wrong running $mummer_cmd_file!");
-
-    if ($Opt{'cleanup'}) {
-        unlink $fasta1;
-        unlink $fasta2;
-        unlink "$workingdir/nucmer.$nucmer_name.err";
-        unlink "$workingdir/nucmer.$nucmer_name.coords";
-        unlink "$workingdir/nucmer.$nucmer_name.out";
-        unlink "$workingdir/run_mummer.$nucmer_name.sh";
-    }
 
     return "$workingdir/nucmer.$nucmer_name.delta";
 }
