@@ -251,23 +251,37 @@ sub process_variant {
     my ($simlength, $reptype, $refwidened);
     if (@{$ra_entry_pairs} == 1) { # as expected
         my $ra_aligns = $ra_entry_pairs->[0]->{aligns};
+        my @sorted_aligns = sort bypercentagemismatch @{$ra_aligns};
+        sub bypercentagemismatch {
+            my $pm_a = $a->{mismatches}/alignlength($a->{cigar_string});
+            my $pm_b = $b->{mismatches}/alignlength($b->{cigar_string});
+
+            if ($pm_a > $pm_b) {
+               return 1;
+            } elsif ($pm_a < $pm_b) {
+               return -1;
+            } else {
+               return 0;
+            }
+        }
         my ($left_align, $right_align, $end2end_align);
         my @center_aligns = (); # aligns which do not stretch to reference ends
-        foreach my $rh_align (@{$ra_aligns}) {
+        foreach my $rh_align (@sorted_aligns) {
             my $ref_entry = $rh_align->{ref_entry};
             my $query_entry = $rh_align->{query_entry};
             my $ref_start = $rh_align->{ref_start};
             my $ref_end = $rh_align->{ref_end};
             my $query_start = $rh_align->{query_start};
             my $query_end = $rh_align->{query_end};
-            DEBUG("$ref_start\t$query_start\t$ref_end\t$query_end");
-            if ($ref_start == 1 && $ref_end == length($ref_allele)) {
+            my $percmismatch = $rh_align->{mismatches}/alignlength($rh_align->{cigar_string});
+            DEBUG("$ref_start\t$query_start\t$ref_end\t$query_end\t$percmismatch");
+            if ($ref_start == 1 && $ref_end == length($ref_allele) && $query_start == 1 && $query_end == length($alt_allele)) {
                 $end2end_align = $rh_align;
             }
-            elsif ($ref_start == 1) {
+            elsif ($ref_start == 1 && $query_start == 1) {
                 $left_align = $rh_align;
             }
-            elsif ($ref_end == length($ref_allele)) {
+            elsif ($ref_end == length($ref_allele) && $query_end == length($alt_allele)) {
                 $right_align = $rh_align;
             }
             else {
@@ -436,7 +450,6 @@ sub format_50 {
     return \$formattedseq;
 }
 
-
 sub run_mummer {
     my $workingdir = shift;
     my $fasta1 = shift;
@@ -454,6 +467,20 @@ sub run_mummer {
         or FATAL("Something went wrong running $mummer_cmd_file!");
 
     return "$workingdir/nucmer.$nucmer_name.delta";
+}
+
+sub alignlength {
+    my $cigar = shift;
+
+    my $alignlength = 0;
+    while ($cigar) {
+        my $op = ($cigar =~ s/^(\d+[A-Z])//) ? $1 : '';
+
+        if ($op =~ /^(\d+)[MID]$/)  {
+            $alignlength += $1;
+        }
+    }
+    return $alignlength;
 }
 
 __END__
