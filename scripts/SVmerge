@@ -47,6 +47,7 @@ $commandline = $0." $commandline";
 process_commandline();
 
 my $ref_fasta = $Opt{ref};
+my $ref_db = GTB::FASTA->new($ref_fasta);
 my $vcf_file = $Opt{variants};
 my $fof_file = $Opt{fof};
 my $prefix = $Opt{prefix};
@@ -381,6 +382,21 @@ sub retrieve_next_sorted_sv {
         }
         elsif ($info =~ /SVTYPE=BND/ || $info =~ /SVTYPE=UNK/) {
             return {};
+        }
+        elsif (($alt eq '<DEL>') && ($info =~ /;END=(\d+);{0,1}/ || $info =~ /^END=(\d+);{0,1}/)) { # use end tag
+            $end = $1;
+            my $smo = $start - 1;
+            $ref = uc($ref_db->seq("$chrom:$smo-$end"));
+            $alt = substr($ref, 0, 1); # first character of reference
+            $reflength = $end - $smo + 1;
+            $altlength = 1;
+            INFO("Calculating sequence for deletion $id");
+        }
+        elsif (($alt eq '<INS>') && ($info =~ /;SEQ=([atgcnATGCN]+);{0,1}/ || $info =~ /^SEQ=([atgcnATGCN]+);{0,1}/)) { # use end tag
+            $alt = uc($1); # first character of reference
+            $end = $start + length($ref) - 1;
+            $altlength = length($alt);
+            INFO("Using sequence from SEQ tag for insertion $id");
         }
         else { # check for END= INFO tag
             INFO("Skipping non-ATGC ref or alt:$next_line");
