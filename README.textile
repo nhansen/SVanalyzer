@@ -19,7 +19,7 @@ For details on setting up conda/bioconda, see https://bioconda.github.io/user/in
 
 bc.. conda create -n svanalyzer
 conda activate svanalyzer
-conda install svanalyzer
+conda install -c bioconda svanalyzer
 
 h2. Building github version on your own: Dependencies
 
