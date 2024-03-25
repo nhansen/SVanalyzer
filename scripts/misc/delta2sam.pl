@@ -38,7 +38,7 @@ my $ref_fasta = $Opt{ref_fasta}; # will use values from delta file if not suppli
 my $delta_file = $Opt{delta};
 
 my $outsam = $Opt{out};
-my $sam_fh = Open($outsam, "w");
+my $sam_fh = ($outsam) ? Open($outsam, "w") : *STDOUT;
 
 my $delta_obj = NHGRI::MUMmer::AlignSet->new(-delta_file => $delta_file,
                                              -reference_file => $ref_fasta,
@@ -83,10 +83,10 @@ sub process_commandline {
         pod2usage(0);
     }
 
-    if (!($Opt{out})) {
-        print STDERR "Must specify a SAM file path to write to with the --out option!\n"; 
-        pod2usage(0);
-    }
+    #if (!($Opt{out})) {
+        #print STDERR "Must specify a SAM file path to write to with the --out option!\n"; 
+        #pod2usage(0);
+    #}
 }
 
 sub write_header {
@@ -109,11 +109,13 @@ sub write_edgelets {
     my $query_db = shift;
     my $sam_fh = shift;
 
+    print STDERR "Parsing entry pairs\n";
     my %ref_entry_hash = map {$_->{ref_entry} => 1} @{$delta_obj->{entry_pairs}};
     my @unique_ref_entries = keys %ref_entry_hash;
     @unique_ref_entries = sort @unique_ref_entries;
 
     foreach my $ref_entry (@unique_ref_entries) {
+        print STDERR "Parsing $ref_entry edgelets\n";
         my @ref_entry_pairs = grep {$_->{ref_entry} eq $ref_entry} @{$delta_obj->{entry_pairs}};
         my @ref_aligns = ();
         foreach my $rh_entry_pair (@ref_entry_pairs) {
@@ -175,7 +177,7 @@ sub write_edgelets {
                 $cigar = $cigar.$query_hc."H";
             }
             my $seq = $query_db->seq($query_entry, $query_start, $query_end);
-            print $sam_fh "$query_entry\t$flag\t$ref_entry\t$ref_start\t0\t$cigar\t*\t0\t0\t$seq\t*\n";
+            print $sam_fh "$query_entry\t$flag\t$ref_entry\t$ref_start\t40\t$cigar\t*\t0\t0\t$seq\t*\n";
         }
     }
 }

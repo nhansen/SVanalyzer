@@ -109,11 +109,11 @@ sub widen_insertion {
     $self->{alignset_obj}->find_query_coords_from_ref_coord($ref2, $chrom);
 
     if (!$left_align->{query_matches}->{$ref1} || $query1 != $left_align->{query_matches}->{$ref1}) {
-        die "QUERY1 $query1 doesn\'t match $left_align->{query_matches}->{$ref1}\n";
+        print STDERR "QUERY1 $query1 doesn\'t match $left_align->{query_matches}->{$ref1}\n";
     }
 
     if (!$right_align->{query_matches}->{$ref2} || $query2 != $right_align->{query_matches}->{$ref2}) {
-        die "QUERY2 $query2 doesn\'t match $right_align->{query_matches}->{$ref2}\n";
+        print STDERR "QUERY2 $query2 doesn\'t match $right_align->{query_matches}->{$ref2}\n";
     }
 
     $self->{query1p} = $right_align->{query_matches}->{$ref1};
@@ -163,11 +163,11 @@ sub widen_deletion {
     $self->{alignset_obj}->find_ref_coords_from_query_coord($query2, $contig);
 
     if (!$left_align->{ref_matches}->{$query1} || $ref1 != $left_align->{ref_matches}->{$query1}) {
-        die "REF1 $ref1 doesn\'t match $left_align->{ref_matches}->{$query1}\n";
+        print STDERR "REF1 $ref1 doesn\'t match $left_align->{ref_matches}->{$query1}\n";
     }
 
     if (!$right_align->{ref_matches}->{$query2} || $ref2 != $right_align->{ref_matches}->{$query2}) {
-        die "REF2 $ref2 doesn\'t match $right_align->{ref_matches}->{$query2}\n";
+        print STDERR "REF2 $ref2 doesn\'t match $right_align->{ref_matches}->{$query2}\n";
     }
 
     $self->{ref1p} = $right_align->{ref_matches}->{$query1};

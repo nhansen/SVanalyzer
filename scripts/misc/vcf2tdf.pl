@@ -81,7 +81,7 @@ while (<$vcf_fh>) {
         }
 
         if (@{$ra_info_fields}) {
-            my @all_info_fields = map {$info_values{$_} || '.'} @{$ra_info_fields};
+            my @all_info_fields = map {defined($info_values{$_}) ? $info_values{$_} : '.'} @{$ra_info_fields};
             my $info_string = join "\t", @all_info_fields;
             print join("\t", $chr, $pos, $var_id, $ref_allele,
                     $alt_allele_string, $score, $info_string), "\n";
