@@ -761,7 +761,7 @@ sub write_simple_variant {
 
         my $compstring = ($comp) ? '_comp' : '';
         my $svtype = 'INS';
-        $svsize = length($altseq) - length($refseq);
+        $svsize = $altend - $altpos - $end + $pos;
 
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2-$ref1;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query2p-$query1p$compstring";
         push @{$ra_vcf_lines}, "$varstring";
@@ -802,7 +802,7 @@ sub write_simple_variant {
             }
         }
         my $svtype = 'DEL';
-        $svsize = length($altseq) - length($refseq);
+	$svsize = $end - $pos;
 
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref2p-$ref1p;ALTPOS=$varcontig:$altpos-$altpos$compstring;ALTWIDENED=$varcontig:$query2-$query1$compstring";
@@ -819,7 +819,7 @@ sub write_simple_variant {
                 $altseq =~ tr/ATGC/TACG/;
             }
         }
-        $svsize = length($altseq) - length($refseq);
+	$svsize = $altend - $altpos - ($end - $pos);
 
         my $compstring = ($comp) ? '_comp' : '';
         my $varstring = "$chrom\t$pos\t.\t$refseq\t$altseq\t.\tPASS\tEND=$end;SVTYPE=$svtype;REPTYPE=$vartype;SVLEN=$svsize;BREAKSIMLENGTH=$repbases;REFWIDENED=$chrom:$ref1-$ref2;ALTPOS=$varcontig:$altpos-$altend$compstring;ALTWIDENED=$varcontig:$query1-$query2$compstring";
